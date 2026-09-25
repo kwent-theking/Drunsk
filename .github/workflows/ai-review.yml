@@ -1,0 +1,63 @@
+name: AI PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to review"
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number || github.event.inputs.pr }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve PR number
+        id: pr
+        env:
+          PR_INPUT: ${{ github.event.inputs.pr }}
+          PR_EVENT: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -n "$PR_INPUT" ]; then
+            echo "number=$PR_INPUT" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=$PR_EVENT" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch PR diff and metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr diff "${{ steps.pr.outputs.number }}" -R "$GITHUB_REPOSITORY" > pr.diff
+          gh pr view "${{ steps.pr.outputs.number }}" -R "$GITHUB_REPOSITORY" \
+            --json title,body,headRefOid > pr_meta.json
+
+      - name: Run AI review
+        id: ai
+        env:
+          AI_REVIEW_URL: ${{ secrets.AI_REVIEW_URL }}
+          AI_REVIEW_KEY: ${{ secrets.AI_REVIEW_KEY }}
+          AI_REVIEW_MODEL: ${{ vars.AI_REVIEW_MODEL }}
+          AI_API_STYLE: ${{ vars.AI_API_STYLE }}
+          AI_REVIEW_SYSTEM: ${{ vars.AI_REVIEW_SYSTEM }}
+        run: python3 scripts/ai_review.py pr.diff pr_meta.json review.md
+
+      - name: Post review to PR
+        if: steps.ai.outputs.reviewed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment "${{ steps.pr.outputs.number }}" -R "$GITHUB_REPOSITORY" --body-file review.md
