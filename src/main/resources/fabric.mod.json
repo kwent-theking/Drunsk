@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "chekushki",
+  "version": "1.0.0+26.2",
+  "name": "Chekushki",
+  "description": "Чекушки Drunsk: баланс, переводы, лудка и паспорта.",
+  "authors": ["Drunsk"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["ua.chekushki.client.ChekushkiClientInitializer"]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "26.2",
+    "java": ">=21"
+  }
+}
