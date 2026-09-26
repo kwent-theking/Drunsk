@@ -13,3 +13,5 @@ scratchpad/bot/main*.py
 # OS
 Thumbs.db
 .DS_Store
+
+__pycache__/
