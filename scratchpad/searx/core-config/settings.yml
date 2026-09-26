@@ -1,0 +1,32 @@
+# SearXNG settings for the Drunsk gate deployment.
+# Настройки SearXNG для деплоя за прослойкой Drunsk.
+#
+# The instance is NOT public: no host port, only `gate` reaches it on the
+# compose network, and the gate enforces its own API key + rate limit. The
+# limiter is therefore off — turning it on would also require wiring the
+# valkey URL into this file, a knob with version-dependent spelling.
+# Инстанс НЕ публичный: наружу только gate со своим ключом и рейт-лимитом,
+# поэтому limiter выключен.
+
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "Drunsk Search"
+
+search:
+  # JSON is what the gate consumes; html stays for manual debugging via SSH.
+  formats:
+    - html
+    - json
+
+server:
+  secret_key: "__SECRET_KEY__"
+  limiter: false
+  image_proxy: false
+  # The gate queries SearXNG with GET; POST-only mode makes GET /search 404.
+  # Гейт ходит в SearXNG по GET; в POST-режиме GET /search отдаёт 404.
+  method: "GET"
+
+ui:
+  static_use_hash: true

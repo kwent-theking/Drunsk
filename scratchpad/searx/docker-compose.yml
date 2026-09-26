@@ -1,0 +1,56 @@
+name: searxng
+
+services:
+  core:
+    container_name: searxng-core
+    image: docker.io/searxng/searxng:${SEARXNG_VERSION:-latest}
+    restart: always
+    env_file: ./.env
+    volumes:
+      - ./core-config/:/etc/searxng/:Z
+      - core-data:/var/cache/searxng/
+    networks:
+      - searxng-network
+    # No host port: SearXNG is reachable only from `gate` on this network.
+    expose:
+      - "${SEARXNG_PORT:-8091}"
+
+  valkey:
+    container_name: searxng-valkey
+    image: docker.io/valkey/valkey:9-alpine
+    command: valkey-server --save 30 1 --loglevel warning
+    restart: always
+    volumes:
+      - valkey-data:/data/
+    networks:
+      - searxng-network
+
+  gate:
+    container_name: searxng-gate
+    image: docker.io/library/node:22-alpine
+    restart: always
+    command: node /app/gate.js
+    working_dir: /app
+    environment:
+      GATE_KEY: ${GATE_KEY}
+      SEARXNG_URL: http://searxng-core:${SEARXNG_PORT:-8091}
+      GATE_PORT: "8092"
+      GATE_RATE_PER_MIN: ${GATE_RATE_PER_MIN:-120}
+      GATE_MAX_RESULTS: ${GATE_MAX_RESULTS:-12}
+      GATE_TIMEOUT_MS: ${GATE_TIMEOUT_MS:-12000}
+    volumes:
+      - ./gate:/app:ro
+    ports:
+      - "127.0.0.1:8092:8092"
+    networks:
+      - searxng-network
+    depends_on:
+      - core
+
+volumes:
+  core-data:
+  valkey-data:
+
+networks:
+  searxng-network:
+    driver: bridge
