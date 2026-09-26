@@ -1,0 +1,14 @@
+{
+  "name": "drunsk-relay",
+  "version": "1.0.0",
+  "description": "Drunsk relay: virtual passports, shared economy bridge (Drunbot MySQL), transfers, casino. /Ретранслятор Drunsk: виртуальные паспорта, мост к общей экономике Друнбота, переводы, лудка.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "selftest": "node selftest.js"
+  },
+  "dependencies": {
+    "mysql2": "^3.11.0",
+    "ws": "^8.18.0"
+  }
+}

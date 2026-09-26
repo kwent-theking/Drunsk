@@ -1,0 +1,15 @@
+# Gradle / loom
+mod/.gradle/
+mod/build/
+mod/run/
+
+# Node
+relay/node_modules/
+
+# Bot source copies (friend's code, patched copies live here only)
+# Копии исходника бота (чужой код, локально только для патчей)
+scratchpad/bot/main*.py
+
+# OS
+Thumbs.db
+.DS_Store

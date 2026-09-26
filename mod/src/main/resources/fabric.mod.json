@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "drunsk",
+  "version": "${version}",
+  "name": "Drunsk",
+  "description": "Virtual passports, shared balance with Drunbot, transfers and casino for the Drunsk clan. / Виртуальные паспорта, общий с Друнботом баланс, переводы и лудка для клана Друнск.",
+  "authors": ["kwent"],
+  "contact": {},
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.drunsk.DrunskClient"]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*",
+    "fabric-key-binding-api-v1": "*",
+    "fabric-command-api-v2": "*",
+    "fabric-lifecycle-events-v1": "*",
+    "fabric-networking-api-v1": "*"
+  }
+}
