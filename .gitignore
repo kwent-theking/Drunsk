@@ -1,17 +1,27 @@
 # Gradle / loom
+.gradle/
+build/
+run/
+out/
 mod/.gradle/
 mod/build/
 mod/run/
 
+# IDE
+.idea/
+*.iml
+
 # Node
 relay/node_modules/
+
+# Logs
+*.log
 
 # Bot source copies (friend's code, patched copies live here only)
 # Копии исходника бота (чужой код, локально только для патчей)
 scratchpad/bot/main*.py
+__pycache__/
 
 # OS
 Thumbs.db
 .DS_Store
-
-__pycache__/

@@ -1,26 +1,31 @@
 # Drunsk
 
-Виртуальные паспорта, общий баланс с Друнботом, переводы и лудка для клана Друнск.
-Virtual passports, shared balance with Drunbot, money transfers and casino for the Drunsk clan.
+Инфраструктура клана Друнск для Minecraft: виртуальные паспорта, общий с
+Друнботом баланс чекушек, переводы и лудка.
+Clan Drunsk Minecraft infrastructure: virtual passports, balance shared with
+Drunbot, money transfers and casino.
 
-Состоит из двух частей / Two parts:
+В репозитории два независимых мода и серверная часть / Two independent mods and a server side:
 
-- `mod/` — клиентский Fabric-мод для Minecraft 1.21.11 (mojmap, loom 1.13, Java 21+).
-- `relay/` — Node.js relay-сервер на ВПС `31.77.147.126`: мост к MySQL-экономике
-  Друнбота (`s1_okak`), хранит привязки паспортов, крутит лудку, ведёт историю операций.
+| Путь | Что | Версия MC | Автор |
+|---|---|---|---|
+| `mod/` | **Drunsk passports** — паспорта, книга паспортов, переводы, лудка, история; связь через wss-relay | 1.21.11 (Fabric, mojmap, loom 1.13) | kwent |
+| `src/`, `build.gradle` (корень) | **Chekushki** — баланс/переводы/лудка через HTTP API `/botpanel/mod/*` | 26.2 (Fabric, Java 25, loom 1.18.2) | Belmo |
+| `relay/` | Relay-сервер (Node.js) на ВПС 31.77.147.126: мост к MySQL-экономике Друнбота | — | kwent |
 
-## Как это работает / How it works
+Деньги ОДНИ на всех: баланс в обоих модах — это та же строка `users.balance` в
+базе Друнбота (`s1_okak`), что и `!баланс` в Discord. Перевод из игры мгновенно
+виден в Discord и наоборот.
+
+---
+
+## Часть kwent: мод `mod/` + relay
 
 ```
 Minecraft (мод)  --wss-->  Caddy /drunsk*  -->  127.0.0.1:8790 drunsk-relay  -->  MariaDB s1_okak
                                                                                         ^
 Discord (Друнбот: !баланс, !дать, !паспорт)  -------------------------------------------+
 ```
-
-Деньги ОДНИ: баланс в моде — это та же строка `users.balance`, что и `!баланс` в
-Discord. Перевод из игры мгновенно виден в Discord и наоборот.
-Money is SHARED: the mod's balance is the same `users.balance` row as Discord's
-`!баланс`. Transfers are visible on both sides immediately.
 
 ### Привязка паспорта / Passport pairing
 
@@ -32,7 +37,7 @@ Money is SHARED: the mod's balance is the same `users.balance` row as Discord's
 ### Возможности мода / Mod features
 
 - **P** на игрока — его паспорт (ник, Discord-имя, баланс, дата выдачи, онлайн).
-- **P** в никуда — своё меню (хаб): мой паспорт, книга паспортов (все игроки клана),
+- **P** в никуда — хаб: мой паспорт, книга паспортов (все игроки клана),
   перевод, лудка, история операций.
 - Переводы: атомарно в БД, с проверкой средств; получатель получает live-уведомление.
 - Лудка (бросок на сервере): монетка x2 (48%), кости больше/меньше x2 (49%),
@@ -48,30 +53,21 @@ Money is SHARED: the mod's balance is the same `users.balance` row as Discord's
 - Relay слушает только 127.0.0.1, наружу — только через Caddy (wss).
 - systemd: `drunsk-relay`, `Restart=always`, креды БД в `/etc/drunsk-relay.env` (root:drunskrelay, 600).
 
-## Сборка / Build
-
-Мод / Mod:
+### Сборка / Build
 
 ```
 cd mod
-build.bat        # cached Gradle 9.6.1 + JDK 23; jar lands in mod/build/libs/drunsk-1.0.0.jar
+build.bat        # кэшированный Gradle 9.6.1 + JDK 23; jar -> mod/build/libs/drunsk-1.0.0.jar
 ```
 
 Требования мода: Fabric Loader >= 0.19, Fabric API (обязательно), Minecraft ~1.21.11, Java 21+.
 
-Relay selftest (на ВПС, против `drunsk_test` — НЕ против живой базы!):
+Selftest релея (на ВПС, только против `drunsk_test` — НЕ против живой базы!):
+`cd /opt/drunsk-relay && node selftest.js` — 37 проверок: привязка, auth,
+переводы (включая 10 параллельных — сохранение денег), лудка (сохранение денег,
+сверка с бухгалтерией `drunsk_tx`), приватность, presence, рейт-лимит, чужой токен.
 
-```
-ssh root@31.77.147.126
-cd /opt/drunsk-relay
-DB_HOST=127.0.0.1 DB_NAME=drunsk_test ... node selftest.js   # creds via env from /etc/drunsk-relay.env
-```
-
-37 проверок: привязка, auth, переводы (включая 10 параллельных — сохранение денег),
-лудка (сохранение денег, сверка с бухгалтерией drunsk_tx), приватность, presence,
-рейт-лимит, чужой токен.
-
-## Деплой на ВПС / VPS deploy
+### Деплой на ВПС / VPS deploy
 
 - Сервис: `/etc/systemd/system/drunsk-relay.service`, код в `/opt/drunsk-relay/`.
 - Caddy: `handle /drunsk* { reverse_proxy 127.0.0.1:8790 }` → `wss://xn--d1amilgk.online/drunsk`
@@ -81,7 +77,7 @@ DB_HOST=127.0.0.1 DB_NAME=drunsk_test ... node selftest.js   # creds via env fro
 - Патч бота: команда `!паспорт` в `main.py` (скрипт `scratchpad/bot/patch_passport.py`,
   идемпотентный, сохраняет EOL; бэкап `main.py.bak-drunsk-*`).
 
-## Протокол / Protocol
+### Протокол / Protocol
 
 Клиент → сервер: `{id, type, ...}`. Сервер → клиент: `{id, ok, ...}` или пуш `{type}`.
 
@@ -96,3 +92,23 @@ DB_HOST=127.0.0.1 DB_NAME=drunsk_test ... node selftest.js   # creds via env fro
 | casino | game, bet, pick? | win, payout, detail, newBalance |
 | history | limit? | последние операции |
 | ping | — | эхо; пуши: `presence`, `balance_changed`, `paired`, `pair_expired` |
+
+---
+
+## Часть Belmo: мод Chekushki (корень репо)
+
+Мод синхронизирует валюту «чекушки» из Discord-бота Drunsk с Minecraft 26.2.
+
+- открытие меню по клавише `L` (регистрируется в настройках управления)
+- баланс чекушек
+- перевод чекушек другому игроку
+- лудка: шанс 777 задаётся в панели, выигрыш удваивает ставку
+- список паспортов — доступен только игроку `_Belmo`
+- подключение к API `/botpanel/mod/*`:
+  - `GET /botpanel/mod/status?nick=НИК`
+  - `POST /botpanel/mod/transfer`
+  - `POST /botpanel/mod/casino`
+  - `GET /botpanel/mod/passports?nick=_Belmo`
+
+Сборка: Java 25, Gradle 9.7+, Fabric Loom 1.18.2; `gradle build` →
+`build/libs/chekushki-1.0.0+26.2.jar`. Подробности в `SETUP.md` и `SECURITY.md`.
