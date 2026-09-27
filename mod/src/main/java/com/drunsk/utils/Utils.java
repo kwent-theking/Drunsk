@@ -39,8 +39,12 @@ public final class Utils {
         AutoFish.tick(mc);
         AutoTotem.tick(mc);
         AutoEat.tick(mc);
-        AutoTool.tick(mc);
-        AutoBlock.tick(mc);
+        // auto-tool and auto-block yield to auto-eat while eating
+        // / автоинструмент и автоблок уступают автоеде пока ест
+        if (!AutoEat.isEating()) {
+            AutoTool.tick(mc);
+            AutoBlock.tick(mc);
+        }
     }
 
     /** Drop transient module state on disconnect. / Сброс состояния модулей при дисконнекте. */

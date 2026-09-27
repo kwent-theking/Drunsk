@@ -27,6 +27,9 @@ public final class AutoBlock {
         }
         LocalPlayer player = mc.player;
         if (player == null || mc.gameMode == null || player.isCreative()) return;
+        // don't act while any screen (inventory) is open — Shift moves stacks
+        // / не работаем пока открыт любой экран (инвентарь) — Shift двигает стаки
+        if (mc.gui.screen() != null) return;
         if (player.tickCount - lastCheck < CHECK_INTERVAL) return;
         lastCheck = player.tickCount;
 

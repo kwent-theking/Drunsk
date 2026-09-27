@@ -39,11 +39,15 @@ public final class DrunskState {
     public record DmEntry(String from, String to, String text, long at) {
     }
 
+    public record ChatEntry(String from, String text, long at) {
+    }
+
     private volatile Me me;
     private volatile List<Passport> passports = List.of();
     private volatile List<HistoryEntry> history = List.of();
     private volatile Set<String> online = Set.of();
     private volatile long lastBalanceChangedAt;
+    private volatile List<ChatEntry> chatThread = List.of();
     /** peer nick (lowercase) -> thread, oldest first / ник собеседника -> тред, старые первыми */
     private final Map<String, List<DmEntry>> dmThreads = new ConcurrentHashMap<>();
     /** unread counters by peer / счётчики непрочитанных по собеседникам */
@@ -77,6 +81,20 @@ public final class DrunskState {
                             net.minecraft.network.chat.Component.translatable(
                                     "drunsk.dm.notify", e.from(), e.text())));
                 }
+            }
+        });
+        RelayClient.get().onPush("chat", msg -> {
+            ChatEntry e = new ChatEntry(msg.get("from").getAsString(),
+                    msg.get("text").getAsString(), msg.get("at").getAsLong());
+            List<ChatEntry> thread = new ArrayList<>(chatThread);
+            thread.add(e);
+            if (thread.size() > 50) thread = new ArrayList<>(thread.subList(thread.size() - 50, thread.size()));
+            chatThread = List.copyOf(thread);
+            String meNick = myNick();
+            if (!e.from().equalsIgnoreCase(meNick) && Minecraft.getInstance().player != null) {
+                runOnRender(() -> Minecraft.getInstance().player.sendOverlayMessage(
+                        net.minecraft.network.chat.Component.translatable(
+                                "drunsk.chat.notify", e.from(), e.text())));
             }
         });
     }
@@ -248,6 +266,46 @@ public final class DrunskState {
                 req.addProperty("text", queued.text());
             });
         }
+    }
+
+    // --- global chat / общий чат ---------------------------------------------
+
+    public List<ChatEntry> chatThread() {
+        return chatThread;
+    }
+
+    public void fetchChatHistory(java.util.function.Consumer<Boolean> done) {
+        if (!RelayClient.get().isReady()) {
+            runOnRender(() -> done.accept(false));
+            return;
+        }
+        RelayClient.get().sendRequest("chat_history", null)
+                .whenComplete((r, e) -> runOnRender(() -> {
+                    if (e != null || r == null || !r.get("ok").getAsBoolean()) {
+                        done.accept(false);
+                        return;
+                    }
+                    List<ChatEntry> out = new ArrayList<>();
+                    r.getAsJsonArray("messages").forEach(el -> {
+                        JsonObject o = el.getAsJsonObject();
+                        out.add(new ChatEntry(o.get("from").getAsString(),
+                                o.get("text").getAsString(), o.get("at").getAsLong()));
+                    });
+                    chatThread = List.copyOf(out);
+                    done.accept(true);
+                }));
+    }
+
+    public void sendChat(String text, java.util.function.Consumer<Boolean> done) {
+        if (!RelayClient.get().isReady()) {
+            runOnRender(() -> done.accept(false));
+            return;
+        }
+        RelayClient.get().sendRequest("chat_send", req -> req.addProperty("text", text))
+                .whenComplete((r, e) -> runOnRender(() -> {
+                    boolean ok = e == null && r != null && r.get("ok").getAsBoolean();
+                    done.accept(ok);
+                }));
     }
 
     private static DmEntry parseDm(JsonObject o) {

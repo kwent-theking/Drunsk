@@ -34,6 +34,11 @@ public final class AutoEat {
         stopEating(null);
     }
 
+    /** Whether auto-eat is currently chewing. / Ест ли автоеда прямо сейчас. */
+    public static boolean isEating() {
+        return eating;
+    }
+
     public static void tick(Minecraft mc) {
         LocalPlayer player = mc.player;
         if (player == null || mc.gameMode == null) {

@@ -202,7 +202,7 @@ public final class CasinoScreen extends DrunskScreen {
         DrunskState.Me me = DrunskState.get().me();
         if (me != null) {
             centered(g, I18n.get("drunsk.hub.balance_line",
-                    UiText.num(me.balance()), me.currency()), width / 2, 32, 0xFF88FF88);
+                    UiText.num(me.balance()), I18n.get("drunsk.currency")), width / 2, 32, 0xFF88FF88);
         }
         // highlight the selected pick / подсветка выбранной ставки
         for (int i = 0; i < 3; i++) {

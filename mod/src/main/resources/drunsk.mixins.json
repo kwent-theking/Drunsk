@@ -17,6 +17,7 @@
     "freecam.MinecraftMixin",
     "freecam.MultiPlayerGameModeMixin",
     "freecam.OptionsMixin",
+    "freecam.FreecamF4HookMixin",
     "ClientLevelPredictionAccessor",
     "FishingHookBitingAccessor",
     "FullBrightMixin",

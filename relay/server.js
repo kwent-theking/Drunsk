@@ -101,6 +101,14 @@ async function ensureSchema() {
     created_at BIGINT NOT NULL,
     KEY by_thread (guild_id, from_user, to_user, id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS drunsk_chat (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    guild_id BIGINT NOT NULL,
+    from_user BIGINT NOT NULL,
+    body VARCHAR(400) NOT NULL,
+    created_at BIGINT NOT NULL,
+    KEY by_time (guild_id, id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
 }
 
 // --- helpers ---------------------------------------------------------------
@@ -429,10 +437,18 @@ function pushDm(toUserId, payload) {
   for (const s of set) send(s, { type: 'dm', ...payload });
 }
 
+function isMuted(nick) {
+  const exp = mutedNicks.get(nick.toLowerCase());
+  if (exp && exp > Date.now()) return true;
+  if (exp) mutedNicks.delete(nick.toLowerCase());
+  return false;
+}
+
 async function handleDmSend(ws, msg, sess) {
   const toNick = msg.to;
   const text = typeof msg.text === 'string' ? msg.text.trim() : '';
   if (!validNick(toNick)) return fail(ws, msg.id, 'bad_nick');
+  if (isMuted(sess.mcNick)) return fail(ws, msg.id, 'muted');
   if (!text) return fail(ws, msg.id, 'bad_text');
   if (text.length > DM_MAX_LEN) return fail(ws, msg.id, 'bad_text');
   if (toNick.toLowerCase() === sess.mcNick.toLowerCase()) return fail(ws, msg.id, 'self_dm');
@@ -475,6 +491,107 @@ async function handleDmHistory(ws, msg, sess) {
   });
 }
 
+// --- global chat / общий чат -------------------------------------------------
+// Messages visible to all online clan members. Stored in drunsk_chat (last 50).
+// Сообщения видимы всем онлайн-друзьям. Хранятся в drunsk_chat (последние 50).
+const CHAT_HISTORY_LIMIT = 50;
+
+function broadcastChat(payload) {
+  for (const client of wss.clients) {
+    if (client.readyState === client.OPEN) send(client, { type: 'chat', ...payload });
+  }
+}
+
+async function handleChatSend(ws, msg, sess) {
+  const text = typeof msg.text === 'string' ? msg.text.trim() : '';
+  if (isMuted(sess.mcNick)) return fail(ws, msg.id, 'muted');
+  if (!text) return fail(ws, msg.id, 'bad_text');
+  if (text.length > 400) return fail(ws, msg.id, 'bad_text');
+  const now = Date.now();
+  const body = text.slice(0, 400);
+  await pool.query(
+    'INSERT INTO drunsk_chat (guild_id, from_user, body, created_at) VALUES (?, ?, ?, ?)',
+    [GUILD_ID, sess.userId, body, now]);
+  const payload = { from: sess.mcNick, text: body, at: now };
+  broadcastChat(payload);
+  ok(ws, msg.id, { at: now });
+}
+
+async function handleChatHistory(ws, msg, sess) {
+  const [rows] = await pool.query(
+    `SELECT c.from_user, c.body, c.created_at, p.mc_nick
+     FROM drunsk_chat c LEFT JOIN drunsk_passports p
+       ON p.guild_id = c.guild_id AND p.user_id = c.from_user
+     WHERE c.guild_id = ? ORDER BY c.id DESC LIMIT ${CHAT_HISTORY_LIMIT}`,
+    [GUILD_ID]);
+  rows.reverse();
+  ok(ws, msg.id, {
+    messages: rows.map(r => ({
+      from: r.mc_nick || String(r.from_user),
+      text: r.body,
+      at: Number(r.created_at),
+    })),
+  });
+}
+
+// --- admin / админка ----------------------------------------------------------
+// Admins: kwentgames + _Belmo (from OWNER_IDS). Admin panel: kick, mute, stats.
+// Админы: kwentgames + _Belmo (из OWNER_IDS). Админ-панель: кик, мут, статистика.
+const ADMIN_NICKS = new Set(['kwentgames', '_belmo']);
+const mutedNicks = new Map(); // nick(lower) -> expiresAt
+
+function isAdmin(sess) {
+  return isOwner(sess.userId) || ADMIN_NICKS.has(sess.mcNick.toLowerCase());
+}
+
+async function handleAdminKick(ws, msg, sess) {
+  if (!isAdmin(sess)) return fail(ws, msg.id, 'not_admin');
+  const target = msg.nick;
+  if (!validNick(target)) return fail(ws, msg.id, 'bad_nick');
+  const key = target.toLowerCase();
+  const set = onlineNicks.get(key);
+  if (!set || set.size === 0) return fail(ws, msg.id, 'not_online');
+  for (const s of set) {
+    send(s, { type: 'error', reason: 'kicked' });
+    s.close(1000, 'kicked by admin');
+  }
+  ok(ws, msg.id, { kicked: target });
+}
+
+async function handleAdminMute(ws, msg, sess) {
+  if (!isAdmin(sess)) return fail(ws, msg.id, 'not_admin');
+  const target = msg.nick;
+  if (!validNick(target)) return fail(ws, msg.id, 'bad_nick');
+  const durationMs = Number.isInteger(msg.durationMs) ? msg.durationMs : 300000; // 5 min default
+  mutedNicks.set(target.toLowerCase(), Date.now() + durationMs);
+  ok(ws, msg.id, { muted: target, until: Date.now() + durationMs });
+}
+
+async function handleAdminUnmute(ws, msg, sess) {
+  if (!isAdmin(sess)) return fail(ws, msg.id, 'not_admin');
+  const target = msg.nick;
+  if (!validNick(target)) return fail(ws, msg.id, 'bad_nick');
+  mutedNicks.delete(target.toLowerCase());
+  ok(ws, msg.id, { unmuted: target });
+}
+
+async function handleAdminStats(ws, msg, sess) {
+  if (!isAdmin(sess)) return fail(ws, msg.id, 'not_admin');
+  const [passportCount] = await pool.query(
+    'SELECT COUNT(*) c FROM drunsk_passports WHERE guild_id = ?', [GUILD_ID]);
+  const [msgCount] = await pool.query(
+    'SELECT COUNT(*) c FROM drunsk_msg WHERE guild_id = ?', [GUILD_ID]);
+  const [chatCount] = await pool.query(
+    'SELECT COUNT(*) c FROM drunsk_chat WHERE guild_id = ?', [GUILD_ID]);
+  ok(ws, msg.id, {
+    online: onlineNicks.size,
+    passports: Number(passportCount[0].c),
+    dms: Number(msgCount[0].c),
+    chats: Number(chatCount[0].c),
+    muted: [...mutedNicks.entries()].filter(([, exp]) => exp > Date.now()).map(([n]) => n),
+  });
+}
+
 const HANDLERS = {
   me: handleMe,
   list: handleList,
@@ -484,6 +601,12 @@ const HANDLERS = {
   history: handleHistory,
   dm_send: handleDmSend,
   dm_history: handleDmHistory,
+  chat_send: handleChatSend,
+  chat_history: handleChatHistory,
+  admin_kick: handleAdminKick,
+  admin_mute: handleAdminMute,
+  admin_unmute: handleAdminUnmute,
+  admin_stats: handleAdminStats,
 };
 
 // --- sessions / сессии -----------------------------------------------------

@@ -1,4 +1,5 @@
 {
+  "drunsk:main": "Drunsk",
   "key.drunsk.passport": "Паспорт Drunsk / открыть меню",
   "key.drunsk.utils": "Утилиты Drunsk",
   "key.drunsk.freecam": "Фрикам (вкл/выкл)",
@@ -133,5 +134,23 @@
   "key.drunsk.gamma": "Гамма (вкл/выкл)",
   "key.drunsk.eat": "Автоеда (вкл/выкл)",
   "key.drunsk.tool": "Автоинструмент (вкл/выкл)",
-  "key.drunsk.block": "Автоблок (вкл/выкл)"
+  "key.drunsk.block": "Автоблок (вкл/выкл)",
+  "drunsk.btn.chat": "Чат",
+  "drunsk.btn.admin": "Админ-панель",
+  "drunsk.screen.chat": "Общий чат",
+  "drunsk.chat.placeholder": "Сообщение…",
+  "drunsk.chat.notify": "Чат от %s: %s",
+  "drunsk.screen.admin": "Админ-панель",
+  "drunsk.admin.nick": "Ник игрока",
+  "drunsk.admin.kick": "Кик",
+  "drunsk.admin.mute": "Мут (5 мин)",
+  "drunsk.admin.unmute": "Размут",
+  "drunsk.admin.stats": "Статистика",
+  "drunsk.admin.online": "Онлайн",
+  "drunsk.admin.passports": "Паспортов",
+  "drunsk.admin.dms": "ЛС",
+  "drunsk.admin.chats": "Чат",
+  "drunsk.reason.not_admin": "нет прав админа",
+  "drunsk.reason.muted": "вы в муте",
+  "drunsk.reason.kicked": "кикнут админом"
 }
