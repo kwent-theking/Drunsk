@@ -535,10 +535,13 @@ async function handleChatHistory(ws, msg, sess) {
 }
 
 // --- admin / админка ----------------------------------------------------------
-// Admins: kwentgames + _Belmo (from OWNER_IDS). Admin panel: kick, mute, stats.
-// Админы: kwentgames + _Belmo (из OWNER_IDS). Админ-панель: кик, мут, статистика.
+// Admins: kwentgames + _Belmo (from OWNER_IDS). Admin panel: kick, mute, stats,
+// player info, give/take money.
+// Админы: kwentgames + _Belmo (из OWNER_IDS). Админ-панель: кик, мут, статистика,
+// инфо игрока, дать/забрать деньги.
 const ADMIN_NICKS = new Set(['kwentgames', '_belmo']);
 const mutedNicks = new Map(); // nick(lower) -> expiresAt
+const playerMeta = new Map(); // nick(lower) -> { serverIp, mcVersion, joinedAt }
 
 function isAdmin(sess) {
   return isOwner(sess.userId) || ADMIN_NICKS.has(sess.mcNick.toLowerCase());
@@ -556,6 +559,88 @@ async function handleAdminKick(ws, msg, sess) {
     s.close(1000, 'kicked by admin');
   }
   ok(ws, msg.id, { kicked: target });
+}
+
+async function handleAdminPlayer(ws, msg, sess) {
+  if (!isAdmin(sess)) return fail(ws, msg.id, 'not_admin');
+  const target = msg.nick;
+  if (!validNick(target)) return fail(ws, msg.id, 'bad_nick');
+  const p = await nickToPassport(target);
+  if (!p) return fail(ws, msg.id, 'no_passport');
+  const meta = playerMeta.get(target.toLowerCase()) || {};
+  const playtimeMs = Date.now() - Number(p.created_at);
+  ok(ws, msg.id, {
+    nick: p.mc_nick,
+    userId: String(p.user_id),
+    since: Number(p.created_at),
+    playtimeMs,
+    online: onlineNicks.has(target.toLowerCase()),
+    serverIp: meta.serverIp || null,
+    mcVersion: meta.mcVersion || null,
+    joinedAt: meta.joinedAt || null,
+  });
+}
+
+async function handleAdminGive(ws, msg, sess) {
+  if (!isAdmin(sess)) return fail(ws, msg.id, 'not_admin');
+  const target = msg.nick;
+  const amount = msg.amount;
+  if (!validNick(target)) return fail(ws, msg.id, 'bad_nick');
+  if (!validAmount(amount)) return fail(ws, msg.id, 'bad_amount');
+  const p = await nickToPassport(target);
+  if (!p) return fail(ws, msg.id, 'no_passport');
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query('INSERT IGNORE INTO users (guild_id, user_id, balance, bought_custom, is_hidden) VALUES (?, ?, 0, 0, 0)',
+      [GUILD_ID, p.user_id]);
+    await conn.query('UPDATE users SET balance = balance + ? WHERE guild_id = ? AND user_id = ?',
+      [amount, GUILD_ID, p.user_id]);
+    const [nb] = await conn.query('SELECT balance FROM users WHERE guild_id = ? AND user_id = ?',
+      [GUILD_ID, p.user_id]);
+    await conn.query('INSERT INTO drunsk_tx (guild_id, from_user, to_user, amount, kind, detail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [GUILD_ID, sess.userId, p.user_id, amount, 'admin_give', 'admin', Date.now()]);
+    await conn.commit();
+    ok(ws, msg.id, { to: p.mc_nick, amount, newBalance: Number(nb[0].balance) });
+    notifyBalance(p.user_id);
+  } catch (e) {
+    await conn.rollback();
+    fail(ws, msg.id, 'db_error');
+  } finally {
+    conn.release();
+  }
+}
+
+async function handleAdminTake(ws, msg, sess) {
+  if (!isAdmin(sess)) return fail(ws, msg.id, 'not_admin');
+  const target = msg.nick;
+  const amount = msg.amount;
+  if (!validNick(target)) return fail(ws, msg.id, 'bad_nick');
+  if (!validAmount(amount)) return fail(ws, msg.id, 'bad_amount');
+  const p = await nickToPassport(target);
+  if (!p) return fail(ws, msg.id, 'no_passport');
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.query('SELECT balance FROM users WHERE guild_id = ? AND user_id = ? FOR UPDATE',
+      [GUILD_ID, p.user_id]);
+    const bal = rows.length ? Number(rows[0].balance) : 0;
+    if (bal < amount) { await conn.rollback(); return fail(ws, msg.id, 'not_enough'); }
+    await conn.query('UPDATE users SET balance = balance - ? WHERE guild_id = ? AND user_id = ?',
+      [amount, GUILD_ID, p.user_id]);
+    const [nb] = await conn.query('SELECT balance FROM users WHERE guild_id = ? AND user_id = ?',
+      [GUILD_ID, p.user_id]);
+    await conn.query('INSERT INTO drunsk_tx (guild_id, from_user, to_user, amount, kind, detail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [GUILD_ID, p.user_id, sess.userId, amount, 'admin_take', 'admin', Date.now()]);
+    await conn.commit();
+    ok(ws, msg.id, { from: p.mc_nick, amount, newBalance: Number(nb[0].balance) });
+    notifyBalance(p.user_id);
+  } catch (e) {
+    await conn.rollback();
+    fail(ws, msg.id, 'db_error');
+  } finally {
+    conn.release();
+  }
 }
 
 async function handleAdminMute(ws, msg, sess) {
@@ -607,6 +692,9 @@ const HANDLERS = {
   admin_mute: handleAdminMute,
   admin_unmute: handleAdminUnmute,
   admin_stats: handleAdminStats,
+  admin_player: handleAdminPlayer,
+  admin_give: handleAdminGive,
+  admin_take: handleAdminTake,
 };
 
 // --- sessions / сессии -----------------------------------------------------
@@ -664,6 +752,12 @@ wss.on('connection', (ws, req) => {
       onlineNicks.get(key).add(ws);
       if (!userSockets.has(sess.userId)) userSockets.set(sess.userId, new Set());
       userSockets.get(sess.userId).add(ws);
+      // player metadata for admin panel / метаданные игрока для админ-панели
+      playerMeta.set(key, {
+        serverIp: typeof msg.serverIp === 'string' ? msg.serverIp : null,
+        mcVersion: typeof msg.mcVersion === 'string' ? msg.mcVersion : null,
+        joinedAt: Date.now(),
+      });
       log('auth ok:', nick);
       ok(ws, msg.id, { userId: sess.userId, owner: isOwner(sess.userId), currency: CURRENCY });
       broadcastPresence();

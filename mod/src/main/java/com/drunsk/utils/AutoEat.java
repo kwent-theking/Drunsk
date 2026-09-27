@@ -12,17 +12,20 @@ import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 
 /**
  * Auto-eat: below the food threshold, picks food into hand and eats until
- * restored. If food is already selected — eat immediately; if in hotbar —
- * select it; if in main inventory — swap into the current hotbar slot.
+ * restored. Two-phase: switch slot first, eat on the next tick so the server
+ * has processed the carried-item packet.
  * / Автоеда: ниже порога еды берёт еду в руку и ест до восстановления.
- * Если еда уже выбрана — ест сразу; в хотбаре — выбирает слот; в основном
- * инвентаре — свапает в текущий слот хотбара (без переключения).
+ * Двухфазная: сначала переключает слот, на следующем тике ест — чтобы сервер
+ * успел обработать пакет смены слота.
  */
 public final class AutoEat {
 
     private static final int CHECK_INTERVAL = 5;
+    private static final int SWITCH_DELAY = 2; // ticks to wait after slot switch
 
     private static boolean eating;
+    private static boolean switched; // slot switched, waiting to eat
+    private static int switchAt;
     private static InteractionHand eatHand;
     private static int prevSlot = -1;
     private static int lastCheck;
@@ -36,7 +39,7 @@ public final class AutoEat {
 
     /** Whether auto-eat is currently chewing. / Ест ли автоеда прямо сейчас. */
     public static boolean isEating() {
-        return eating;
+        return eating || switched;
     }
 
     public static void tick(Minecraft mc) {
@@ -47,6 +50,18 @@ public final class AutoEat {
         }
         if (!DrunskConfig.util.autoEat || player.isCreative() || player.isSpectator()) {
             stopEating(mc);
+            return;
+        }
+
+        // phase 2: slot already switched, now eat
+        // / фаза 2: слот уже переключён, теперь едим
+        if (switched) {
+            if (player.tickCount >= switchAt) {
+                switched = false;
+                eatHand = InteractionHand.MAIN_HAND;
+                startUse(mc, player);
+                eating = true;
+            }
             return;
         }
 
@@ -79,20 +94,17 @@ public final class AutoEat {
         if (slot < 0) return;
 
         if (slot < 9) {
-            // food in hotbar — select that slot
-            // / еда в хотбаре — выбираем этот слот
             prevSlot = selected;
             Utils.selectHotbar(mc, slot, DrunskConfig.util.autoEatPacket);
         } else {
-            // food in main inventory — swap into the CURRENT hotbar slot
-            // / еда в основном инвентаре — свапаем в ТЕКУЩИЙ слот хотбара
             prevSlot = selected;
             Utils.swapSlots(mc, slot, selected, DrunskConfig.util.autoEatPacket);
         }
 
-        eatHand = InteractionHand.MAIN_HAND;
-        startUse(mc, player);
-        eating = true;
+        // wait for the server to process the slot change before eating
+        // / ждём пока сервер обработает смену слота перед едой
+        switched = true;
+        switchAt = player.tickCount + SWITCH_DELAY;
     }
 
     private static void startUse(Minecraft mc, LocalPlayer player) {
@@ -107,8 +119,9 @@ public final class AutoEat {
     }
 
     private static void stopEating(Minecraft mc) {
-        if (!eating) return;
+        if (!eating && !switched) return;
         eating = false;
+        switched = false;
         eatHand = null;
         if (mc == null) return;
         LocalPlayer player = mc.player;

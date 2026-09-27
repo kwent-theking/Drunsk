@@ -220,6 +220,12 @@ public final class RelayClient {
                     hello.addProperty("type", "hello");
                     hello.addProperty("mcNick", mcNick);
                     if (token != null) hello.addProperty("token", token);
+                    // player metadata for admin panel / метаданные для админ-панели
+                    net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+                    if (mc.getCurrentServer() != null) {
+                        hello.addProperty("serverIp", mc.getCurrentServer().ip);
+                    }
+                    hello.addProperty("mcVersion", net.minecraft.SharedConstants.getCurrentVersion().name());
                     CompletableFuture<JsonObject> helloFuture = new CompletableFuture<>();
                     pending.put(id, new Pending(helloFuture, System.currentTimeMillis() + 10_000));
                     ws.sendText(hello.toString(), true);

@@ -72,16 +72,27 @@ public final class ChatScreen extends DrunskScreen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partial) {
         super.extractRenderState(g, mouseX, mouseY, partial);
-        centered(g, ChatFormatting.GOLD + I18n.get("drunsk.screen.chat"), width / 2, 14, 0xFFFFD700);
-
-        List<DrunskState.ChatEntry> list = DrunskState.get().chatThread();
+        int cx = width / 2;
+        int panelW = 320;
+        int panelX = cx - panelW / 2;
         int top = 30;
         int bottom = height - 66;
+
+        // panel background + border / фон панели + рамка
+        g.fill(panelX, top - 4, panelX + panelW, bottom + 4, 0x90000000);
+        g.fill(panelX, top - 4, panelX + panelW, top - 3, 0xFF555555);
+        g.fill(panelX, bottom + 3, panelX + panelW, bottom + 4, 0xFF555555);
+        g.fill(panelX, top - 4, panelX + 1, bottom + 4, 0xFF555555);
+        g.fill(panelX + panelW - 1, top - 4, panelX + panelW, bottom + 4, 0xFF555555);
+
+        centered(g, ChatFormatting.GOLD + I18n.get("drunsk.screen.chat"), cx, 14, 0xFFFFD700);
+
+        List<DrunskState.ChatEntry> list = DrunskState.get().chatThread();
         int rows = Math.max(1, (bottom - top) / ROW_H);
         scroll = Math.min(scroll, Math.max(0, list.size() - rows));
         SimpleDateFormat fmt = new SimpleDateFormat("HH:mm");
         String me = DrunskState.get().myNick();
-        int x = width / 2 - 150;
+        int x = panelX + 8;
         int y = top;
         for (int i = scroll; i < Math.min(list.size(), scroll + rows); i++) {
             DrunskState.ChatEntry e = list.get(i);
@@ -89,11 +100,11 @@ public final class ChatScreen extends DrunskScreen {
             String line = ChatFormatting.DARK_GRAY + fmt.format(new Date(e.at())) + " "
                     + (mine ? ChatFormatting.AQUA : ChatFormatting.YELLOW) + e.from() + ChatFormatting.GRAY + ": "
                     + ChatFormatting.WHITE + e.text();
-            text(g, font.plainSubstrByWidth(line, 300), x, y, 0xFFDDDDDD);
+            text(g, font.plainSubstrByWidth(line, panelW - 16), x, y, 0xFFDDDDDD);
             y += ROW_H;
         }
         if (status != null) {
-            centered(g, status, width / 2, bottom + 2, statusColor);
+            centered(g, status, cx, bottom + 6, statusColor);
         }
     }
 
