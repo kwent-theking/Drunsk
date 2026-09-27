@@ -120,5 +120,18 @@
   "drunsk.reason.rate_limited": "too fast, wait a bit",
   "drunsk.reason.offline": "no connection to relay",
   "drunsk.reason.unauthorized": "unauthorized",
-  "drunsk.reason.db_error": "database error"
+  "drunsk.reason.db_error": "database error",
+  "drunsk.utils.modes": "Modes",
+  "drunsk.utils.thresholds": "Thresholds",
+  "drunsk.utils.autoTotemHealth": "HP for auto-totem",
+  "drunsk.utils.autoEatFood": "Food level for auto-eat",
+  "drunsk.utils.autoToolDurability": "Tool wear threshold",
+  "drunsk.utils.freecamSpeedH": "Freecam speed (horizontal)",
+  "drunsk.utils.freecamSpeedV": "Freecam speed (vertical)",
+  "key.drunsk.fish": "Auto-fish (toggle)",
+  "key.drunsk.totem": "Auto-totem (toggle)",
+  "key.drunsk.gamma": "Gamma (toggle)",
+  "key.drunsk.eat": "Auto-eat (toggle)",
+  "key.drunsk.tool": "Auto-tool (toggle)",
+  "key.drunsk.block": "Auto-block (toggle)"
 }

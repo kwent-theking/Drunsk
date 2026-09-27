@@ -48,8 +48,14 @@ public final class DrunskState {
     private final Map<String, List<DmEntry>> dmThreads = new ConcurrentHashMap<>();
     /** unread counters by peer / счётчики непрочитанных по собеседникам */
     private final Map<String, Integer> unread = new ConcurrentHashMap<>();
+    /** outgoing DMs queued while the relay is unreachable / исходящие ЛС в очереди, пока релей недоступен */
+    private final java.util.Queue<DmOutbox> dmOutbox = new java.util.concurrent.ConcurrentLinkedQueue<>();
+
+    private record DmOutbox(String to, String text) {
+    }
 
     private DrunskState() {
+        RelayClient.get().onOnline(this::flushDmOutbox);
         RelayClient.get().onPush("presence", msg -> {
             Set<String> set = new HashSet<>();
             msg.getAsJsonArray("online").forEach(e -> set.add(e.getAsString()));
@@ -210,7 +216,11 @@ public final class DrunskState {
 
     public void sendDm(String peer, String text, java.util.function.Consumer<Boolean> done) {
         if (!RelayClient.get().isReady()) {
-            runOnRender(() -> done.accept(false));
+            // relay unreachable: queue the message and deliver it when the
+            // socket comes back online / релей недоступен: кладём в очередь,
+            // доставим когда сокет вернётся в ONLINE
+            dmOutbox.add(new DmOutbox(peer, text));
+            runOnRender(() -> done.accept(true)); // pretend sent / делаем вид что отправлено
             return;
         }
         RelayClient.get().sendRequest("dm_send", req -> {
@@ -218,8 +228,26 @@ public final class DrunskState {
             req.addProperty("text", text);
         }).whenComplete((r, e) -> runOnRender(() -> {
             boolean ok = e == null && r != null && r.get("ok").getAsBoolean();
-            done.accept(ok);
+            if (!ok && (e != null || (r != null && "offline".equals(r.has("reason") ? r.get("reason").getAsString() : "")))) {
+                // transient failure — queue for retry / временный сбой — в очередь
+                dmOutbox.add(new DmOutbox(peer, text));
+                done.accept(true);
+            } else {
+                done.accept(ok);
+            }
         }));
+    }
+
+    /** Send everything queued while the relay was down. / Отправляем всё, что скопилось, пока релей лежал. */
+    private void flushDmOutbox() {
+        DmOutbox item;
+        while ((item = dmOutbox.poll()) != null) {
+            final DmOutbox queued = item;
+            RelayClient.get().sendRequest("dm_send", req -> {
+                req.addProperty("to", queued.to());
+                req.addProperty("text", queued.text());
+            });
+        }
     }
 
     private static DmEntry parseDm(JsonObject o) {

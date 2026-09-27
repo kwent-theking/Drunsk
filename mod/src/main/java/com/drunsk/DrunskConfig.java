@@ -37,7 +37,8 @@ public final class DrunskConfig {
         // toggles / переключатели
         public boolean autoFish, autoTotem, gamma, freecam, bedrockMiner, autoEat, autoTool, autoBlock;
         // packet vs vanilla per module / пакетный против ванильного по модулям
-        public boolean autoFishPacket = true, autoTotemPacket = true, bedrockPacket = true,
+        // (bedrock miner is packet-only, freecam has no mode toggle)
+        public boolean autoFishPacket = true, autoTotemPacket = true,
                 autoEatPacket = true, autoToolPacket = true, autoBlockPacket = true;
         // freecam tuning / настройка фрикама
         public double freecamSpeedH = 1.0, freecamSpeedV = 0.8;
@@ -99,7 +100,6 @@ public final class DrunskConfig {
         util.autoBlock = optBool(u, "autoBlock", false);
         util.autoFishPacket = optBool(u, "autoFishPacket", true);
         util.autoTotemPacket = optBool(u, "autoTotemPacket", true);
-        util.bedrockPacket = optBool(u, "bedrockPacket", true);
         util.autoEatPacket = optBool(u, "autoEatPacket", true);
         util.autoToolPacket = optBool(u, "autoToolPacket", true);
         util.autoBlockPacket = optBool(u, "autoBlockPacket", true);
@@ -133,7 +133,6 @@ public final class DrunskConfig {
             u.addProperty("autoBlock", util.autoBlock);
             u.addProperty("autoFishPacket", util.autoFishPacket);
             u.addProperty("autoTotemPacket", util.autoTotemPacket);
-            u.addProperty("bedrockPacket", util.bedrockPacket);
             u.addProperty("autoEatPacket", util.autoEatPacket);
             u.addProperty("autoToolPacket", util.autoToolPacket);
             u.addProperty("autoBlockPacket", util.autoBlockPacket);

@@ -49,7 +49,7 @@ public final class UtilsScreen extends DrunskScreen {
         rows.add(new Row("freecam", () -> Freecam.isEnabled(), v -> toggleFreecam(v),
                 false, null, null));
         rows.add(new Row("bedrockMiner", () -> u.bedrockMiner, v -> u.bedrockMiner = v,
-                true, () -> u.bedrockPacket, v -> u.bedrockPacket = v));
+                false, null, null));
         rows.add(new Row("autoEat", () -> u.autoEat, v -> u.autoEat = v,
                 true, () -> u.autoEatPacket, v -> u.autoEatPacket = v));
         rows.add(new Row("autoTool", () -> u.autoTool, v -> u.autoTool = v,

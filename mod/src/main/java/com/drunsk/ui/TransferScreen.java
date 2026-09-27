@@ -76,8 +76,8 @@ public final class TransferScreen extends DrunskScreen {
                 message = I18n.get("drunsk.transfer.error", UiText.reason(reason));
                 messageColor = 0xFFFF6666;
             } else {
-                message = I18n.get("drunsk.transfer.done", String.format("%,d", amount), toNick,
-                        String.format("%,d", r.get("newBalance").getAsLong()));
+                message = I18n.get("drunsk.transfer.done", UiText.num(amount), toNick,
+                        UiText.num(r.get("newBalance").getAsLong()));
                 messageColor = 0xFF88FF88;
                 amountBox.setValue("");
                 DrunskState.get().refreshMe();

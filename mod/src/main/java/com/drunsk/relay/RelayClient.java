@@ -62,12 +62,19 @@ public final class RelayClient {
 
     /** Push listeners by message type / слушатели пушей по типу сообщения */
     private final Map<String, Consumer<JsonObject>> listeners = new ConcurrentHashMap<>();
+    /** fired when the socket reaches ONLINE (after hello) / при переходе в ONLINE (после hello) */
+    private final java.util.List<Runnable> onlineCallbacks = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     private record Pending(CompletableFuture<JsonObject> future, long deadline) {
     }
 
     private RelayClient() {
         exec.scheduleWithFixedDelay(this::expirePending, 5, 5, TimeUnit.SECONDS);
+    }
+
+    /** Register a callback invoked each time the relay goes ONLINE. / Колбэк на каждый переход в ONLINE. */
+    public void onOnline(Runnable r) {
+        onlineCallbacks.add(r);
     }
 
     public Status status() {
@@ -239,6 +246,13 @@ public final class RelayClient {
                         lastError.set("");
                         startPing();
                         DrunskClient.LOGGER.info("relay online as {}", mcNick);
+                        for (Runnable r : onlineCallbacks) {
+                            try {
+                                r.run();
+                            } catch (Exception ex) {
+                                DrunskClient.LOGGER.warn("online callback failed", ex);
+                            }
+                        }
                     });
                 });
     }

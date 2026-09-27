@@ -184,11 +184,11 @@ public final class CasinoScreen extends DrunskScreen {
                 boolean win = r.get("win").getAsBoolean();
                 String detail = r.has("detail") ? r.get("detail").getAsString() : "";
                 resultLine = (win ? ChatFormatting.GREEN + I18n.get("drunsk.casino.win",
-                        String.format("%,d", r.get("payout").getAsLong()))
+                        UiText.num(r.get("payout").getAsLong()))
                         : ChatFormatting.RED + I18n.get("drunsk.casino.lose"))
                         + ChatFormatting.GRAY + " [" + detail + "]"
                         + ChatFormatting.RESET + " " + I18n.get("drunsk.casino.new_balance",
-                        String.format("%,d", r.get("newBalance").getAsLong()));
+                        UiText.num(r.get("newBalance").getAsLong()));
                 resultColor = win ? 0xFF88FF88 : 0xFFFF8888;
                 DrunskState.get().refreshMe();
             }
@@ -202,7 +202,7 @@ public final class CasinoScreen extends DrunskScreen {
         DrunskState.Me me = DrunskState.get().me();
         if (me != null) {
             centered(g, I18n.get("drunsk.hub.balance_line",
-                    String.format("%,d", me.balance()), me.currency()), width / 2, 32, 0xFF88FF88);
+                    UiText.num(me.balance()), me.currency()), width / 2, 32, 0xFF88FF88);
         }
         // highlight the selected pick / подсветка выбранной ставки
         for (int i = 0; i < 3; i++) {

@@ -120,5 +120,18 @@
   "drunsk.reason.rate_limited": "слишком часто, подождите",
   "drunsk.reason.offline": "нет соединения с релеем",
   "drunsk.reason.unauthorized": "нет доступа",
-  "drunsk.reason.db_error": "ошибка базы данных"
+  "drunsk.reason.db_error": "ошибка базы данных",
+  "drunsk.utils.modes": "Режимы",
+  "drunsk.utils.thresholds": "Пороги",
+  "drunsk.utils.autoTotemHealth": "HP для автототема",
+  "drunsk.utils.autoEatFood": "Уровень еды для автоеды",
+  "drunsk.utils.autoToolDurability": "Порог износа инструмента",
+  "drunsk.utils.freecamSpeedH": "Скорость фрикама (гориз.)",
+  "drunsk.utils.freecamSpeedV": "Скорость фрикама (верт.)",
+  "key.drunsk.fish": "Автофиш (вкл/выкл)",
+  "key.drunsk.totem": "Автототем (вкл/выкл)",
+  "key.drunsk.gamma": "Гамма (вкл/выкл)",
+  "key.drunsk.eat": "Автоеда (вкл/выкл)",
+  "key.drunsk.tool": "Автоинструмент (вкл/выкл)",
+  "key.drunsk.block": "Автоблок (вкл/выкл)"
 }
