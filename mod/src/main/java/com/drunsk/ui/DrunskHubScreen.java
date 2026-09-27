@@ -45,11 +45,17 @@ public final class DrunskHubScreen extends DrunskScreen {
         addRenderableWidget(Button.builder(Component.translatable("drunsk.btn.dm"), b ->
                         minecraft.gui.setScreen(new DmListScreen()))
                 .bounds(cx + 2, y + 120, 98, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("drunsk.btn.chat"), b ->
+                        minecraft.gui.setScreen(new ChatScreen()))
+                .bounds(cx - 100, y + 144, 98, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("drunsk.btn.utils"), b ->
                         minecraft.gui.setScreen(new UtilsScreen()))
-                .bounds(cx - 100, y + 144, 200, 20).build());
+                .bounds(cx + 2, y + 144, 98, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("drunsk.btn.admin"), b ->
+                        minecraft.gui.setScreen(new AdminScreen()))
+                .bounds(cx - 100, y + 168, 200, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("drunsk.btn.close"), b -> onClose())
-                .bounds(cx - 49, y + 172, 98, 20).build());
+                .bounds(cx - 49, y + 196, 98, 20).build());
         DrunskState.get().refreshMe();
         DrunskState.get().refreshList(null);
     }
@@ -75,7 +81,7 @@ public final class DrunskHubScreen extends DrunskScreen {
         DrunskState.Me me = DrunskState.get().me();
         if (me != null) {
             centered(g, I18n.get("drunsk.hub.balance_line",
-                    UiText.num(me.balance()), me.currency()), cx, y, 0xFF88FF88);
+                    UiText.num(me.balance()), I18n.get("drunsk.currency")), cx, y, 0xFF88FF88);
         } else if (s == RelayClient.Status.UNPAIRED) {
             centered(g, I18n.get("drunsk.hub.pair_hint"), cx, y, 0xFFCCCCCC);
         }

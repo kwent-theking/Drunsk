@@ -128,7 +128,8 @@ public final class PassportScreen extends DrunskScreen {
     }
 
     private String currency() {
-        DrunskState.Me me = DrunskState.get().me();
-        return me != null ? me.currency() : I18n.get("drunsk.currency");
+        // always from lang file — relay currency string may be cp1251-mangled
+        // / всегда из lang-файла — строка валюты с релея может быть битой
+        return I18n.get("drunsk.currency");
     }
 }

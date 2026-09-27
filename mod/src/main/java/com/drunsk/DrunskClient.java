@@ -177,6 +177,16 @@ public final class DrunskClient implements ClientModInitializer {
             Utils.tick(client);
             BedrockMiner.tick(client);
         });
+
+        LOGGER.info("[Drunsk] успешно хукнуто к моду \"freecam\" (fake-entity, 14 mixins)");
+        LOGGER.info("[Drunsk] успешно хукнуто к моду \"bedrock-miner\" (piston method)");
+        LOGGER.info("[Drunsk] успешно хукнуто к моду \"auto-fish\" (DATA_BITING)");
+        LOGGER.info("[Drunsk] успешно хукнуто к моду \"auto-totem\" (SWAP-40)");
+        LOGGER.info("[Drunsk] успешно хукнуто к моду \"gamma\" (full-bright)");
+        LOGGER.info("[Drunsk] успешно хукнуто к моду \"auto-eat\" (use-item)");
+        LOGGER.info("[Drunsk] успешно хукнуто к моду \"auto-tool\" (destroy-speed)");
+        LOGGER.info("[Drunsk] успешно хукнуто к моду \"auto-block\" (stack-swap)");
+        LOGGER.info("[Drunsk] успешно хукнуто к моду \"dm\" (relay queue)");
     }
 
     private static void onPress(Minecraft client) {

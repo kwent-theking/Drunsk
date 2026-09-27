@@ -1,4 +1,5 @@
 {
+  "drunsk:main": "Drunsk",
   "key.drunsk.passport": "Drunsk passport / open menu",
   "key.drunsk.utils": "Drunsk utilities",
   "key.drunsk.freecam": "Freecam (toggle)",
@@ -133,5 +134,23 @@
   "key.drunsk.gamma": "Gamma (toggle)",
   "key.drunsk.eat": "Auto-eat (toggle)",
   "key.drunsk.tool": "Auto-tool (toggle)",
-  "key.drunsk.block": "Auto-block (toggle)"
+  "key.drunsk.block": "Auto-block (toggle)",
+  "drunsk.btn.chat": "Chat",
+  "drunsk.btn.admin": "Admin panel",
+  "drunsk.screen.chat": "Global chat",
+  "drunsk.chat.placeholder": "Message…",
+  "drunsk.chat.notify": "Chat from %s: %s",
+  "drunsk.screen.admin": "Admin panel",
+  "drunsk.admin.nick": "Player nick",
+  "drunsk.admin.kick": "Kick",
+  "drunsk.admin.mute": "Mute (5 min)",
+  "drunsk.admin.unmute": "Unmute",
+  "drunsk.admin.stats": "Stats",
+  "drunsk.admin.online": "Online",
+  "drunsk.admin.passports": "Passports",
+  "drunsk.admin.dms": "DMs",
+  "drunsk.admin.chats": "Chats",
+  "drunsk.reason.not_admin": "not an admin",
+  "drunsk.reason.muted": "you are muted",
+  "drunsk.reason.kicked": "kicked by admin"
 }

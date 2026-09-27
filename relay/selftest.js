@@ -38,7 +38,7 @@ if (!(process.env.DB_NAME || 'drunsk_test').includes('test')) {
 }
 
 async function reset() {
-  for (const t of ['drunsk_msg', 'drunsk_tx', 'drunsk_pair_codes', 'drunsk_passports', 'users', 'user_names']) {
+  for (const t of ['drunsk_chat', 'drunsk_msg', 'drunsk_tx', 'drunsk_pair_codes', 'drunsk_passports', 'users', 'user_names']) {
     await db.query(`DROP TABLE IF EXISTS ${t}`).catch(() => {});
   }
   await db.query(`CREATE TABLE users (
@@ -338,6 +338,46 @@ async function main() {
     check('too long dm rejected', r6.ok === false && r6.reason === 'bad_text', r6);
     const r7 = await wsPlayer.req('dm_send', { to: 'NoSuchGuy', text: 'эй' });
     check('dm to unknown rejected', r7.ok === false && r7.reason === 'no_passport', r7);
+  }
+
+  // 16. global chat: send, broadcast, history, validation
+  //     общий чат: отправка, рассылка, история, валидация
+  {
+    wsBelmo.pushes.length = 0;
+    const r1 = await wsPlayer.req('chat_send', { text: 'привет всем' });
+    check('chat_send ok', r1.ok && r1.at > 0, r1);
+    await new Promise(res => setTimeout(res, 200));
+    const pushed = wsBelmo.pushes.filter(m => m.type === 'chat');
+    check('chat broadcast to all', pushed.length === 1 && pushed[0].from === 'PlayerOne' && pushed[0].text === 'привет всем', pushed);
+    const r2 = await wsKwent.req('chat_send', { text: 'здарова' });
+    check('chat reply ok', r2.ok, r2);
+    await new Promise(res => setTimeout(res, 200));
+    const r3 = await wsKwent.req('chat_history', {});
+    check('chat_history returns both', r3.ok && r3.messages.length === 2 && r3.messages[0].text === 'привет всем', r3.messages);
+    const r4 = await wsPlayer.req('chat_send', { text: '' });
+    check('empty chat rejected', r4.ok === false && r4.reason === 'bad_text', r4);
+    const r5 = await wsPlayer.req('chat_send', { text: 'x'.repeat(401) });
+    check('too long chat rejected', r5.ok === false && r5.reason === 'bad_text', r5);
+  }
+
+  // 17. admin: stats, kick, mute, not-admin rejection
+  //     админка: статистика, кик, мут, отказ не-админу
+  {
+    const r1 = await wsKwent.req('admin_stats', {});
+    check('admin stats for owner', r1.ok && r1.online >= 3 && r1.passports >= 3, r1);
+    const r2 = await wsPlayer.req('admin_stats', {});
+    check('admin stats rejected for non-admin', r2.ok === false && r2.reason === 'not_admin', r2);
+    const r3 = await wsPlayer.req('admin_kick', { nick: 'kwent' });
+    check('admin kick rejected for non-admin', r3.ok === false && r3.reason === 'not_admin', r3);
+    // mute PlayerOne, then chat should be rejected
+    const r4 = await wsKwent.req('admin_mute', { nick: 'PlayerOne', durationMs: 60000 });
+    check('admin mute ok', r4.ok, r4);
+    const r5 = await wsPlayer.req('chat_send', { text: 'я в муте' });
+    check('muted chat rejected', r5.ok === false && r5.reason === 'muted', r5);
+    const r6 = await wsKwent.req('admin_unmute', { nick: 'PlayerOne' });
+    check('admin unmute ok', r6.ok, r6);
+    const r7 = await wsPlayer.req('chat_send', { text: 'размучен' });
+    check('unmuted chat ok', r7.ok, r7);
   }
 
   for (const w of [wsKwent, wsBelmo, wsPlayer]) w.close();
