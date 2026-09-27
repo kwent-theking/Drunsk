@@ -38,7 +38,7 @@ if (!(process.env.DB_NAME || 'drunsk_test').includes('test')) {
 }
 
 async function reset() {
-  for (const t of ['drunsk_tx', 'drunsk_pair_codes', 'drunsk_passports', 'users', 'user_names']) {
+  for (const t of ['drunsk_msg', 'drunsk_tx', 'drunsk_pair_codes', 'drunsk_passports', 'users', 'user_names']) {
     await db.query(`DROP TABLE IF EXISTS ${t}`).catch(() => {});
   }
   await db.query(`CREATE TABLE users (
@@ -313,6 +313,31 @@ async function main() {
     const r = await ws5.req('hello', { mcNick: 'kwent', token: pk.token.slice(0, 32) + 'x'.repeat(32) });
     check('wrong token rejected', r.ok === false && r.reason === 'unauthorized', r);
     ws5.close();
+  }
+
+  // 15. DM: send, live push, history, validation
+  //     ЛС: отправка, живой пуш, история, валидация
+  {
+    wsKwent.pushes.length = 0;
+    const r1 = await wsPlayer.req('dm_send', { to: 'kwent', text: 'привет друн' });
+    check('dm_send ok', r1.ok && r1.at > 0, r1);
+    await new Promise(res => setTimeout(res, 200));
+    const pushed = wsKwent.pushes.filter(m => m.type === 'dm');
+    check('dm pushed live to recipient', pushed.length === 1 && pushed[0].from === 'PlayerOne' && pushed[0].text === 'привет друн', pushed);
+    const r2 = await wsKwent.req('dm_send', { to: 'PlayerOne', text: 'здарова' });
+    check('dm reply ok', r2.ok, r2);
+    await new Promise(res => setTimeout(res, 200));
+    const r3 = await wsKwent.req('dm_history', { peer: 'PlayerOne' });
+    check('dm_history returns both messages oldest-first',
+      r3.ok && r3.messages.length === 2 && r3.messages[0].text === 'привет друн' && r3.messages[1].from === 'kwent', r3.messages);
+    const r4 = await wsPlayer.req('dm_send', { to: 'PlayerOne', text: 'сам себе' });
+    check('self dm rejected', r4.ok === false && r4.reason === 'self_dm', r4);
+    const r5 = await wsPlayer.req('dm_send', { to: 'kwent', text: '' });
+    check('empty dm rejected', r5.ok === false && r5.reason === 'bad_text', r5);
+    const r6 = await wsPlayer.req('dm_send', { to: 'kwent', text: 'x'.repeat(401) });
+    check('too long dm rejected', r6.ok === false && r6.reason === 'bad_text', r6);
+    const r7 = await wsPlayer.req('dm_send', { to: 'NoSuchGuy', text: 'эй' });
+    check('dm to unknown rejected', r7.ok === false && r7.reason === 'no_passport', r7);
   }
 
   for (const w of [wsKwent, wsBelmo, wsPlayer]) w.close();

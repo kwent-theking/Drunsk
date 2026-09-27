@@ -6,7 +6,9 @@ import net.minecraft.client.Minecraft;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Client-side cache of relay data. All fields updated from the relay thread,
@@ -34,11 +36,18 @@ public final class DrunskState {
                                long at, boolean mine) {
     }
 
+    public record DmEntry(String from, String to, String text, long at) {
+    }
+
     private volatile Me me;
     private volatile List<Passport> passports = List.of();
     private volatile List<HistoryEntry> history = List.of();
     private volatile Set<String> online = Set.of();
     private volatile long lastBalanceChangedAt;
+    /** peer nick (lowercase) -> thread, oldest first / ник собеседника -> тред, старые первыми */
+    private final Map<String, List<DmEntry>> dmThreads = new ConcurrentHashMap<>();
+    /** unread counters by peer / счётчики непрочитанных по собеседникам */
+    private final Map<String, Integer> unread = new ConcurrentHashMap<>();
 
     private DrunskState() {
         RelayClient.get().onPush("presence", msg -> {
@@ -50,6 +59,19 @@ public final class DrunskState {
             lastBalanceChangedAt = System.currentTimeMillis();
             // refresh silently / тихое обновление
             refreshMe();
+        });
+        RelayClient.get().onPush("dm", msg -> {
+            DmEntry e = parseDm(msg);
+            appendDm(e);
+            String meNick = myNick();
+            if (!e.from().equalsIgnoreCase(meNick)) {
+                unread.merge(e.from().toLowerCase(), 1, Integer::sum);
+                if (Minecraft.getInstance().player != null) {
+                    runOnRender(() -> Minecraft.getInstance().player.sendOverlayMessage(
+                            net.minecraft.network.chat.Component.translatable(
+                                    "drunsk.dm.notify", e.from(), e.text())));
+                }
+            }
         });
     }
 
@@ -152,6 +174,67 @@ public final class DrunskState {
                         history = List.copyOf(out);
                     }
                 });
+    }
+
+    // --- DM / ЛС -------------------------------------------------------------
+
+    public List<DmEntry> dmThread(String peer) {
+        return dmThreads.getOrDefault(peer.toLowerCase(), List.of());
+    }
+
+    public int unreadDm(String peer) {
+        return unread.getOrDefault(peer.toLowerCase(), 0);
+    }
+
+    public void markDmRead(String peer) {
+        unread.remove(peer.toLowerCase());
+    }
+
+    public void fetchDmHistory(String peer, java.util.function.Consumer<Boolean> done) {
+        if (!RelayClient.get().isReady()) {
+            runOnRender(() -> done.accept(false));
+            return;
+        }
+        RelayClient.get().sendRequest("dm_history", req -> req.addProperty("peer", peer))
+                .whenComplete((r, e) -> runOnRender(() -> {
+                    if (e != null || r == null || !r.get("ok").getAsBoolean()) {
+                        done.accept(false);
+                        return;
+                    }
+                    List<DmEntry> out = new ArrayList<>();
+                    r.getAsJsonArray("messages").forEach(el -> out.add(parseDm(el.getAsJsonObject())));
+                    dmThreads.put(peer.toLowerCase(), List.copyOf(out));
+                    done.accept(true);
+                }));
+    }
+
+    public void sendDm(String peer, String text, java.util.function.Consumer<Boolean> done) {
+        if (!RelayClient.get().isReady()) {
+            runOnRender(() -> done.accept(false));
+            return;
+        }
+        RelayClient.get().sendRequest("dm_send", req -> {
+            req.addProperty("to", peer);
+            req.addProperty("text", text);
+        }).whenComplete((r, e) -> runOnRender(() -> {
+            boolean ok = e == null && r != null && r.get("ok").getAsBoolean();
+            done.accept(ok);
+        }));
+    }
+
+    private static DmEntry parseDm(JsonObject o) {
+        return new DmEntry(o.get("from").getAsString(), o.get("to").getAsString(),
+                o.get("text").getAsString(), o.get("at").getAsLong());
+    }
+
+    private void appendDm(DmEntry e) {
+        String meNick = myNick();
+        String peer = e.from().equalsIgnoreCase(meNick) ? e.to() : e.from();
+        String key = peer.toLowerCase();
+        List<DmEntry> thread = new ArrayList<>(dmThreads.getOrDefault(key, List.of()));
+        thread.add(e);
+        if (thread.size() > 100) thread = new ArrayList<>(thread.subList(thread.size() - 100, thread.size()));
+        dmThreads.put(key, List.copyOf(thread));
     }
 
     private static Me parseMe(JsonObject o) {

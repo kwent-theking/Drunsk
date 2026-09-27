@@ -92,6 +92,15 @@ async function ensureSchema() {
     KEY by_from (guild_id, from_user, id),
     KEY by_to (guild_id, to_user, id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS drunsk_msg (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    guild_id BIGINT NOT NULL,
+    from_user BIGINT NOT NULL,
+    to_user BIGINT NOT NULL,
+    body VARCHAR(400) NOT NULL,
+    created_at BIGINT NOT NULL,
+    KEY by_thread (guild_id, from_user, to_user, id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
 }
 
 // --- helpers ---------------------------------------------------------------
@@ -406,6 +415,66 @@ async function handleHistory(ws, msg, sess) {
   });
 }
 
+// --- DM / ЛС -----------------------------------------------------------------
+// In-game messages between clan members. Stored in drunsk_msg (100 last per
+// thread are served), pushed live to the recipient's sockets.
+// Сообщения между друнами из игры. Хранятся в drunsk_msg (последние 100 на
+// тред), получателю доставляются пушем.
+const DM_MAX_LEN = 400;
+const DM_HISTORY_LIMIT = 100;
+
+function pushDm(toUserId, payload) {
+  const set = userSockets.get(String(toUserId));
+  if (!set) return;
+  for (const s of set) send(s, { type: 'dm', ...payload });
+}
+
+async function handleDmSend(ws, msg, sess) {
+  const toNick = msg.to;
+  const text = typeof msg.text === 'string' ? msg.text.trim() : '';
+  if (!validNick(toNick)) return fail(ws, msg.id, 'bad_nick');
+  if (!text) return fail(ws, msg.id, 'bad_text');
+  if (text.length > DM_MAX_LEN) return fail(ws, msg.id, 'bad_text');
+  if (toNick.toLowerCase() === sess.mcNick.toLowerCase()) return fail(ws, msg.id, 'self_dm');
+  const target = await nickToPassport(toNick);
+  if (!target) return fail(ws, msg.id, 'no_passport');
+  if (String(target.user_id) === String(sess.userId)) return fail(ws, msg.id, 'self_dm');
+
+  const now = Date.now();
+  const body = text.slice(0, DM_MAX_LEN);
+  await pool.query(
+    'INSERT INTO drunsk_msg (guild_id, from_user, to_user, body, created_at) VALUES (?, ?, ?, ?, ?)',
+    [GUILD_ID, sess.userId, target.user_id, body, now]);
+
+  const payload = { from: sess.mcNick, to: target.mc_nick, text: body, at: now };
+  pushDm(target.user_id, payload);
+  // echo back to own other sockets / эхо на свои остальные сокеты
+  const mine = userSockets.get(String(sess.userId));
+  if (mine) for (const s of mine) if (s !== ws) send(s, { type: 'dm', ...payload });
+  ok(ws, msg.id, { at: now });
+}
+
+async function handleDmHistory(ws, msg, sess) {
+  const peerNick = msg.peer;
+  if (!validNick(peerNick)) return fail(ws, msg.id, 'bad_nick');
+  const peer = await nickToPassport(peerNick);
+  if (!peer) return fail(ws, msg.id, 'no_passport');
+  const [rows] = await pool.query(
+    `SELECT from_user, to_user, body, created_at FROM drunsk_msg
+     WHERE guild_id = ? AND ((from_user = ? AND to_user = ?) OR (from_user = ? AND to_user = ?))
+     ORDER BY id DESC LIMIT ${DM_HISTORY_LIMIT}`,
+    [GUILD_ID, sess.userId, peer.user_id, peer.user_id, sess.userId]);
+  rows.reverse(); // oldest first / старые первыми
+  ok(ws, msg.id, {
+    messages: rows.map(r => ({
+      from: String(r.from_user) === String(sess.userId) ? sess.mcNick : peer.mc_nick,
+      to: String(r.to_user) === String(sess.userId) ? sess.mcNick : peer.mc_nick,
+      text: r.body,
+      at: Number(r.created_at),
+    })),
+  });
+}
+
 const HANDLERS = {
   me: handleMe,
   list: handleList,
@@ -413,6 +482,8 @@ const HANDLERS = {
   transfer: handleTransfer,
   casino: handleCasino,
   history: handleHistory,
+  dm_send: handleDmSend,
+  dm_history: handleDmHistory,
 };
 
 // --- sessions / сессии -----------------------------------------------------
