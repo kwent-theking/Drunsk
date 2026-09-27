@@ -284,15 +284,12 @@ public final class BedrockMiner {
         if (pos == null) return;
         LocalPlayer player = mc.player;
         Direction face = player.getDirection();
-        if (DrunskConfig.util.bedrockPacket) {
-            player.connection.send(new ServerboundPlayerActionPacket(
-                    ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, pos, face));
-            player.connection.send(new ServerboundPlayerActionPacket(
-                    ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, pos, face));
-        } else {
-            mc.gameMode.startDestroyBlock(pos, face);
-            mc.gameMode.stopDestroyBlock();
-        }
+        // packet-only, as in the original BedrockMiner port
+        // / только пакеты, как в оригинальном порте BedrockMiner
+        player.connection.send(new ServerboundPlayerActionPacket(
+                ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, pos, face));
+        player.connection.send(new ServerboundPlayerActionPacket(
+                ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, pos, face));
     }
 
     private static Direction pistonExtendDir(Level level, BlockPos bodyPos) {
@@ -395,7 +392,7 @@ public final class BedrockMiner {
             // move to a free hotbar slot through the menu / через меню в свободный слот хотбара
             Minecraft mc = Minecraft.getInstance();
             int hotbar = player.getInventory().getSuitableHotbarSlot();
-            Utils.swapSlots(mc, slot, hotbar, DrunskConfig.util.bedrockPacket);
+            Utils.swapSlots(mc, slot, hotbar, true);
             player.getInventory().setSelectedSlot(hotbar);
         }
     }

@@ -6,6 +6,7 @@ import com.drunsk.ui.DmScreen;
 import com.drunsk.ui.DrunskHubScreen;
 import com.drunsk.ui.PairScreen;
 import com.drunsk.ui.PassportScreen;
+import com.drunsk.ui.DrunskYaclScreen;
 import com.drunsk.ui.UtilsScreen;
 import com.drunsk.utils.BedrockMiner;
 import com.drunsk.utils.Utils;
@@ -43,6 +44,12 @@ public final class DrunskClient implements ClientModInitializer {
     private static KeyMapping utilsKey;
     private static KeyMapping freecamKey;
     private static KeyMapping minerKey;
+    private static KeyMapping fishKey;
+    private static KeyMapping totemKey;
+    private static KeyMapping gammaKey;
+    private static KeyMapping eatKey;
+    private static KeyMapping toolKey;
+    private static KeyMapping blockKey;
 
     @Override
     public void onInitializeClient() {
@@ -58,6 +65,18 @@ public final class DrunskClient implements ClientModInitializer {
                 "key.drunsk.freecam", InputConstants.Type.KEYSYM, InputConstants.KEY_V, category));
         minerKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.drunsk.miner", InputConstants.Type.KEYSYM, InputConstants.KEY_B, category));
+        fishKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.drunsk.fish", InputConstants.Type.KEYSYM, 0, category));
+        totemKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.drunsk.totem", InputConstants.Type.KEYSYM, 0, category));
+        gammaKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.drunsk.gamma", InputConstants.Type.KEYSYM, 0, category));
+        eatKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.drunsk.eat", InputConstants.Type.KEYSYM, 0, category));
+        toolKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.drunsk.tool", InputConstants.Type.KEYSYM, 0, category));
+        blockKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.drunsk.block", InputConstants.Type.KEYSYM, 0, category));
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registry) -> {
             dispatcher.register(ClientCommands.literal("drunsk")
@@ -113,6 +132,48 @@ public final class DrunskClient implements ClientModInitializer {
             while (minerKey.consumeClick()) {
                 if (client.player != null) BedrockMiner.toggleArmed(client.player);
             }
+            while (fishKey.consumeClick()) {
+                DrunskConfig.util.autoFish = !DrunskConfig.util.autoFish;
+                DrunskConfig.save();
+                if (client.player != null) client.player.sendOverlayMessage(
+                        Component.translatable("drunsk.utils.autoFish")
+                                .append(": ").append(DrunskConfig.util.autoFish ? "ON" : "OFF"));
+            }
+            while (totemKey.consumeClick()) {
+                DrunskConfig.util.autoTotem = !DrunskConfig.util.autoTotem;
+                DrunskConfig.save();
+                if (client.player != null) client.player.sendOverlayMessage(
+                        Component.translatable("drunsk.utils.autoTotem")
+                                .append(": ").append(DrunskConfig.util.autoTotem ? "ON" : "OFF"));
+            }
+            while (gammaKey.consumeClick()) {
+                DrunskConfig.util.gamma = !DrunskConfig.util.gamma;
+                DrunskConfig.save();
+                if (client.player != null) client.player.sendOverlayMessage(
+                        Component.translatable("drunsk.utils.gamma")
+                                .append(": ").append(DrunskConfig.util.gamma ? "ON" : "OFF"));
+            }
+            while (eatKey.consumeClick()) {
+                DrunskConfig.util.autoEat = !DrunskConfig.util.autoEat;
+                DrunskConfig.save();
+                if (client.player != null) client.player.sendOverlayMessage(
+                        Component.translatable("drunsk.utils.autoEat")
+                                .append(": ").append(DrunskConfig.util.autoEat ? "ON" : "OFF"));
+            }
+            while (toolKey.consumeClick()) {
+                DrunskConfig.util.autoTool = !DrunskConfig.util.autoTool;
+                DrunskConfig.save();
+                if (client.player != null) client.player.sendOverlayMessage(
+                        Component.translatable("drunsk.utils.autoTool")
+                                .append(": ").append(DrunskConfig.util.autoTool ? "ON" : "OFF"));
+            }
+            while (blockKey.consumeClick()) {
+                DrunskConfig.util.autoBlock = !DrunskConfig.util.autoBlock;
+                DrunskConfig.save();
+                if (client.player != null) client.player.sendOverlayMessage(
+                        Component.translatable("drunsk.utils.autoBlock")
+                                .append(": ").append(DrunskConfig.util.autoBlock ? "ON" : "OFF"));
+            }
             Utils.tick(client);
             BedrockMiner.tick(client);
         });
@@ -148,7 +209,13 @@ public final class DrunskClient implements ClientModInitializer {
 
     public static void openUtils() {
         Minecraft client = Minecraft.getInstance();
-        client.gui.setScreen(new UtilsScreen());
+        try {
+            // YACL screen if available (bundled), fallback to built-in
+            // / YACL-скрин если доступен (встроен), иначе встроенный
+            client.gui.setScreen(DrunskYaclScreen.create(null));
+        } catch (Throwable t) {
+            client.gui.setScreen(new UtilsScreen());
+        }
     }
 
     public static void openDm(String nick) {

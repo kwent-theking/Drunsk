@@ -65,7 +65,7 @@ public final class PassportBookScreen extends DrunskScreen {
             String disc = p.discordName() != null ? ChatFormatting.DARK_GRAY + " (" + p.discordName() + ")" : "";
             String bal = p.hidden() || p.balance() == null
                     ? ChatFormatting.DARK_GRAY + I18n.get("drunsk.passport.hidden_balance")
-                    : ChatFormatting.YELLOW + String.format("%,d", p.balance());
+                    : ChatFormatting.YELLOW + UiText.num(p.balance());
             text(g, name + disc, x, y + 2, 0xFFFFFFFF);
             text(g, bal, width - x - font.width(bal), y + 2, 0xFFFFFFFF);
             y += ROW_H;

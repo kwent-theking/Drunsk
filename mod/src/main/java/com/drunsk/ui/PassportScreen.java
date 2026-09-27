@@ -93,7 +93,7 @@ public final class PassportScreen extends DrunskScreen {
         DrunskState.Passport p = data;
         String balance = p.hidden() || p.balance() == null
                 ? I18n.get("drunsk.passport.hidden_balance")
-                : String.format("%,d", p.balance()) + " " + currency();
+                : UiText.num(p.balance()) + " " + currency();
         text(g, I18n.get("drunsk.passport.mc_nick", p.mcNick()), x, y, 0xFFFFFFFF);
         y += LINE;
         text(g, I18n.get("drunsk.passport.discord",

@@ -11,11 +11,12 @@ import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 
 /**
- * Auto-eat: below the food threshold, picks the best food slot into hand and
- * uses it until the food is restored. Vanilla mode uses gameMode.useItem +
- * releaseUsingItem; packet mode sends raw USE_ITEM/RELEASE_USE_ITEM packets.
- * / Автоеда: ниже порога еды берёт лучшую еду в руку и ест до восстановления.
- * Ваниль — gameMode.useItem/releaseUsingItem, пакеты — сырые USE_ITEM/RELEASE.
+ * Auto-eat: below the food threshold, picks food into hand and eats until
+ * restored. If food is already selected — eat immediately; if in hotbar —
+ * select it; if in main inventory — swap into the current hotbar slot.
+ * / Автоеда: ниже порога еды берёт еду в руку и ест до восстановления.
+ * Если еда уже выбрана — ест сразу; в хотбаре — выбирает слот; в основном
+ * инвентаре — свапает в текущий слот хотбара (без переключения).
  */
 public final class AutoEat {
 
@@ -45,7 +46,6 @@ public final class AutoEat {
         }
 
         if (eating) {
-            // still hungry and still chewing? / ещё голодны и ещё жуём?
             if (player.getFoodData().getFoodLevel() >= 20 || !player.isUsingItem()) {
                 stopEating(mc);
             }
@@ -58,19 +58,31 @@ public final class AutoEat {
         if (player.getFoodData().getFoodLevel() >= DrunskConfig.util.autoEatFood) return;
         if (player.isUsingItem()) return;
 
+        int selected = player.getInventory().getSelectedSlot();
+        ItemStack held = player.getInventory().getItem(selected);
+
+        // food already in hand — eat immediately, no switching
+        // / еда уже в руке — ест сразу, без переключения
+        if (isEdible(player, held)) {
+            eatHand = InteractionHand.MAIN_HAND;
+            startUse(mc, player);
+            eating = true;
+            return;
+        }
+
         int slot = bestFoodSlot(player);
         if (slot < 0) return;
 
         if (slot < 9) {
-            prevSlot = player.getInventory().getSelectedSlot();
+            // food in hotbar — select that slot
+            // / еда в хотбаре — выбираем этот слот
+            prevSlot = selected;
             Utils.selectHotbar(mc, slot, DrunskConfig.util.autoEatPacket);
         } else {
-            // swap main-inventory food into the hotbar through the menu
-            // / еду из основного инвентаря свапаем в хотбар через меню
-            int hotbar = player.getInventory().getSuitableHotbarSlot();
-            prevSlot = player.getInventory().getSelectedSlot();
-            Utils.swapSlots(mc, slot, hotbar, DrunskConfig.util.autoEatPacket);
-            Utils.selectHotbar(mc, hotbar, DrunskConfig.util.autoEatPacket);
+            // food in main inventory — swap into the CURRENT hotbar slot
+            // / еда в основном инвентаре — свапаем в ТЕКУЩИЙ слот хотбара
+            prevSlot = selected;
+            Utils.swapSlots(mc, slot, selected, DrunskConfig.util.autoEatPacket);
         }
 
         eatHand = InteractionHand.MAIN_HAND;
@@ -106,11 +118,19 @@ public final class AutoEat {
                     mc.gameMode.releaseUsingItem(player);
                 }
             }
-            if (prevSlot >= 0) {
+            if (prevSlot >= 0 && prevSlot != player.getInventory().getSelectedSlot()) {
                 Utils.selectHotbar(mc, prevSlot, DrunskConfig.util.autoEatPacket);
-                prevSlot = -1;
             }
+            prevSlot = -1;
         }
+    }
+
+    private static boolean isEdible(LocalPlayer player, ItemStack stack) {
+        if (stack.isEmpty()) return false;
+        FoodProperties food = stack.get(DataComponents.FOOD);
+        if (food == null) return false;
+        if (!food.canAlwaysEat() && player.getFoodData().getFoodLevel() + food.nutrition() > 20) return false;
+        return true;
     }
 
     /** Hotbar-first search for the most nutritious food. / Ищем самую питательную еду, хотбар в приоритете. */
@@ -131,7 +151,7 @@ public final class AutoEat {
                     best = i;
                 }
             }
-            if (best >= 0) return best; // prefer hotbar, no slot switching / хотбар без переключения слота
+            if (best >= 0) return best;
         }
         return best;
     }

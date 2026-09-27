@@ -75,7 +75,7 @@ public final class DrunskHubScreen extends DrunskScreen {
         DrunskState.Me me = DrunskState.get().me();
         if (me != null) {
             centered(g, I18n.get("drunsk.hub.balance_line",
-                    String.format("%,d", me.balance()), me.currency()), cx, y, 0xFF88FF88);
+                    UiText.num(me.balance()), me.currency()), cx, y, 0xFF88FF88);
         } else if (s == RelayClient.Status.UNPAIRED) {
             centered(g, I18n.get("drunsk.hub.pair_hint"), cx, y, 0xFFCCCCCC);
         }

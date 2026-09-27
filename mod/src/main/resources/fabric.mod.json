@@ -3,13 +3,13 @@
   "id": "drunsk",
   "version": "${version}",
   "name": "Drunsk",
-  "description": "Virtual passports, shared balance with Drunbot, transfers, casino, DMs and PvE utilities for the Drunsk clan. / Виртуальные паспорта, общий с Друнботом баланс, переводы, лудка, ЛС и PvE-утилиты для клана Друнск.",
   "authors": ["kwent"],
   "contact": {},
   "license": "MIT",
   "environment": "client",
   "entrypoints": {
-    "client": ["com.drunsk.DrunskClient"]
+    "client": ["com.drunsk.DrunskClient"],
+    "modmenu": ["com.drunsk.ui.ModMenuBridge"]
   },
   "mixins": [
     "drunsk.mixins.json"
@@ -19,5 +19,9 @@
     "minecraft": "~${minecraft_version}",
     "java": ">=25",
     "fabric-api": "*"
+  },
+  "recommends": {
+    "yet_another_config_lib_v3": "*",
+    "modmenu": "*"
   }
 }
