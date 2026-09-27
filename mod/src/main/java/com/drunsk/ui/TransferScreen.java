@@ -2,18 +2,17 @@ package com.drunsk.ui;
 
 import com.drunsk.relay.DrunskState;
 import com.drunsk.relay.RelayClient;
-import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 
 /**
  * Money transfer to another passport. / Перевод денег другому паспорту.
  */
-public final class TransferScreen extends Screen {
+public final class TransferScreen extends DrunskScreen {
 
     private final String toNick;
     private EditBox amountBox;
@@ -32,8 +31,12 @@ public final class TransferScreen extends Screen {
         amountBox = new EditBox(font, cx - 60, height / 2 - 10, 120, 20,
                 Component.translatable("drunsk.transfer.amount"));
         amountBox.setMaxLength(12);
-        amountBox.setFilter(s -> s.matches("\\d*"));
-        amountBox.setResponder(s -> updateSend());
+        // 26.x has no setFilter: reject non-digits on input / фильтра нет — отбиваем нецифры на вводе
+        amountBox.setResponder(s -> {
+            String digits = s.replaceAll("\\D", "");
+            if (!digits.equals(s)) amountBox.setValue(digits);
+            updateSend();
+        });
         addRenderableWidget(amountBox);
 
         sendBtn = addRenderableWidget(Button.builder(Component.translatable("drunsk.btn.send"), b -> doSend())
@@ -62,10 +65,12 @@ public final class TransferScreen extends Screen {
         if (amount <= 0) return;
         message = I18n.get("drunsk.msg.sending");
         messageColor = 0xFFAAAAAA;
+        sendBtn.active = false;
         RelayClient.get().sendRequest("transfer", req -> {
             req.addProperty("toNick", toNick);
             req.addProperty("amount", amount);
         }).whenComplete((r, e) -> DrunskState.runOnRender(() -> {
+            updateSend();
             if (e != null || !r.get("ok").getAsBoolean()) {
                 String reason = (r != null && r.has("reason")) ? r.get("reason").getAsString() : "offline";
                 message = I18n.get("drunsk.transfer.error", UiText.reason(reason));
@@ -81,18 +86,13 @@ public final class TransferScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
-        super.render(g, mouseX, mouseY, partial);
+    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partial) {
+        super.extractRenderState(g, mouseX, mouseY, partial);
         int cx = width / 2;
-        g.drawCenteredString(font, Component.translatable("drunsk.screen.transfer"), cx, height / 2 - 60, 0xFFFFFFFF);
-        g.drawCenteredString(font, I18n.get("drunsk.transfer.to", toNick), cx, height / 2 - 44, 0xFFCCCCCC);
+        centered(g, Component.translatable("drunsk.screen.transfer"), cx, height / 2 - 60, 0xFFFFFFFF);
+        centered(g, I18n.get("drunsk.transfer.to", toNick), cx, height / 2 - 44, 0xFFCCCCCC);
         if (message != null) {
-            g.drawCenteredString(font, message, cx, height / 2 + 78, messageColor);
+            centered(g, message, cx, height / 2 + 78, messageColor);
         }
-    }
-
-    @Override
-    public boolean isPauseScreen() {
-        return false;
     }
 }

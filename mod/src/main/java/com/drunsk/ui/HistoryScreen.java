@@ -2,9 +2,8 @@ package com.drunsk.ui;
 
 import com.drunsk.relay.DrunskState;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 
@@ -15,7 +14,7 @@ import java.util.List;
 /**
  * Transaction history: transfers and casino rounds. / История операций: переводы и лудка.
  */
-public final class HistoryScreen extends Screen {
+public final class HistoryScreen extends DrunskScreen {
 
     private static final int ROW_H = 12;
     private static final int TOP = 36;
@@ -33,13 +32,12 @@ public final class HistoryScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
-        super.render(g, mouseX, mouseY, partial);
-        g.drawCenteredString(font, ChatFormatting.GOLD + I18n.get("drunsk.screen.history"),
-                width / 2, 14, 0xFFFFD700);
+    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partial) {
+        super.extractRenderState(g, mouseX, mouseY, partial);
+        centered(g, ChatFormatting.GOLD + I18n.get("drunsk.screen.history"), width / 2, 14, 0xFFFFD700);
         List<DrunskState.HistoryEntry> list = DrunskState.get().history();
         if (list.isEmpty()) {
-            g.drawCenteredString(font, I18n.get("drunsk.history.empty"), width / 2, height / 2, 0xFFAAAAAA);
+            centered(g, I18n.get("drunsk.history.empty"), width / 2, height / 2, 0xFFAAAAAA);
             return;
         }
         int rows = Math.max(1, (height - TOP - 40) / ROW_H);
@@ -57,7 +55,7 @@ public final class HistoryScreen extends Screen {
                         + e.amount() + " " + I18n.get("drunsk.history." + e.kind());
                 default -> e.kind() + " " + e.amount();
             };
-            g.drawString(font, fmt.format(new Date(e.at())) + "  " + kind, x, y, 0xFFCCCCCC, false);
+            text(g, fmt.format(new Date(e.at())) + "  " + kind, x, y, 0xFFCCCCCC);
             y += ROW_H;
         }
     }
@@ -66,10 +64,5 @@ public final class HistoryScreen extends Screen {
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         scroll = Math.max(0, scroll - (int) Math.signum(scrollY));
         return true;
-    }
-
-    @Override
-    public boolean isPauseScreen() {
-        return false;
     }
 }

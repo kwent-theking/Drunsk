@@ -3,10 +3,10 @@ package com.drunsk.ui;
 import com.drunsk.relay.DrunskState;
 import com.drunsk.relay.RelayClient;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 
@@ -16,7 +16,7 @@ import net.minecraft.network.chat.Component;
  * / Меню лудки: монетка, кости, рулетка (красное/чёрное/число).
  * Бросок — на сервере, здесь только форма.
  */
-public final class CasinoScreen extends Screen {
+public final class CasinoScreen extends DrunskScreen {
 
     private enum Game { COIN, DICE, ROULETTE }
 
@@ -58,7 +58,10 @@ public final class CasinoScreen extends Screen {
 
         betBox = new EditBox(font, cx - 60, y, 120, 20, Component.translatable("drunsk.casino.bet"));
         betBox.setMaxLength(9);
-        betBox.setFilter(s -> s.matches("\\d*"));
+        betBox.setResponder(s -> {
+            String digits = s.replaceAll("\\D", "");
+            if (!digits.equals(s)) betBox.setValue(digits);
+        });
         betBox.setValue("10");
         addRenderableWidget(betBox);
         y += 30;
@@ -105,6 +108,7 @@ public final class CasinoScreen extends Screen {
                 pickA.setMessage(Component.translatable("drunsk.casino.roulette.red"));
                 pickB.setMessage(Component.translatable("drunsk.casino.roulette.black"));
                 // number pick: bet box becomes 0..14 wheel number
+                // / ставка-число: поле ставки становится числом 0..14
                 pickC.setMessage(Component.translatable("drunsk.casino.roulette.number"));
                 pickC.visible = true;
                 pickAValue = "red";
@@ -135,9 +139,9 @@ public final class CasinoScreen extends Screen {
     private void play() {
         long bet = bet();
         if (bet <= 0 || busy) return;
-        // roulette number: bet box holds the wheel number when C is selected,
-        // stake is fixed at 10 for exact-number plays to keep the form simple
-        // рулетка-число: в поле ставки — число 0..14, ставка фикс 10
+        // roulette number: the field holds the wheel number when C is selected,
+        // stake is fixed at 10 to keep the form simple
+        // / рулетка-число: в поле — число 0..14, ставка фикс 10
         final Object pick;
         final long stake;
         if (game == Game.ROULETTE && currentPick == 2) {
@@ -192,13 +196,12 @@ public final class CasinoScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
-        super.render(g, mouseX, mouseY, partial);
-        g.drawCenteredString(font, ChatFormatting.GOLD + I18n.get("drunsk.screen.casino"),
-                width / 2, 20, 0xFFFFD700);
+    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partial) {
+        super.extractRenderState(g, mouseX, mouseY, partial);
+        centered(g, ChatFormatting.GOLD + I18n.get("drunsk.screen.casino"), width / 2, 20, 0xFFFFD700);
         DrunskState.Me me = DrunskState.get().me();
         if (me != null) {
-            g.drawCenteredString(font, I18n.get("drunsk.hub.balance_line",
+            centered(g, I18n.get("drunsk.hub.balance_line",
                     String.format("%,d", me.balance()), me.currency()), width / 2, 32, 0xFF88FF88);
         }
         // highlight the selected pick / подсветка выбранной ставки
@@ -210,25 +213,19 @@ public final class CasinoScreen extends Screen {
             }
         }
         if (game == Game.ROULETTE && currentPick == 2) {
-            g.drawCenteredString(font, I18n.get("drunsk.casino.number_hint"), width / 2,
-                    height / 2 + 30, 0xFFAAAAAA);
+            centered(g, I18n.get("drunsk.casino.number_hint"), width / 2, height / 2 + 30, 0xFFAAAAAA);
         }
         if (resultLine != null) {
-            g.drawCenteredString(font, resultLine, width / 2, height / 2 + 60, resultColor);
+            centered(g, resultLine, width / 2, height / 2 + 60, resultColor);
         }
     }
 
     @Override
-    public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
+    public boolean keyPressed(KeyEvent event) {
         // keys 1/2/3 pick A/B/C / клавиши 1/2/3 выбирают ставку
         if (event.key() == 49) { select(0); return true; }
         if (event.key() == 50) { select(1); return true; }
         if (event.key() == 51) { select(2); return true; }
         return super.keyPressed(event);
-    }
-
-    @Override
-    public boolean isPauseScreen() {
-        return false;
     }
 }

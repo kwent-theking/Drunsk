@@ -1,0 +1,28 @@
+{
+  "required": true,
+  "package": "com.drunsk.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "freecam.AvatarRendererMixin",
+    "freecam.BlockStateBaseMixin",
+    "freecam.CameraMixin",
+    "freecam.ClientPacketListenerMixin",
+    "freecam.EntityMixin",
+    "freecam.EntityRenderDispatcherMixin",
+    "freecam.GameRendererMixin",
+    "freecam.HudMixin",
+    "freecam.LevelExtractorMixin",
+    "freecam.LivingEntityMixin",
+    "freecam.LocalPlayerMixin",
+    "freecam.MinecraftMixin",
+    "freecam.MultiPlayerGameModeMixin",
+    "freecam.OptionsMixin",
+    "ClientLevelPredictionAccessor",
+    "FishingHookBitingAccessor",
+    "FullBrightMixin",
+    "BedrockMinerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

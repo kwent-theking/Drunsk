@@ -22,6 +22,10 @@ relay/node_modules/
 scratchpad/bot/main*.py
 __pycache__/
 
+# Working scratchpad: deploy scripts reference VPS internals — keep local only
+# Рабочий scratchpad: деплой-скрипты знают внутренности ВПС — только локально
+scratchpad/
+
 # OS
 Thumbs.db
 .DS_Store

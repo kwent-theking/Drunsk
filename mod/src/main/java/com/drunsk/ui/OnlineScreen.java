@@ -11,18 +11,18 @@ import net.minecraft.network.chat.Component;
 import java.util.List;
 
 /**
- * Passport book: scrollable list of all clan passports; click a row to open it.
- * / Книга паспортов: прокручиваемый список паспортов клана, клик — открыть.
+ * Clan online list from the relay presence snapshot; click a row → DM screen.
+ * / Список онлайна клана из presence-снимка релея; клик по строке — ЛС.
  */
-public final class PassportBookScreen extends DrunskScreen {
+public final class OnlineScreen extends DrunskScreen {
 
     private static final int ROW_H = 14;
     private static final int TOP = 40;
     private int scroll;
-    private long lastRefresh;
+    private List<DrunskState.Passport> online;
 
-    public PassportBookScreen() {
-        super(Component.translatable("drunsk.screen.book"));
+    public OnlineScreen() {
+        super(Component.translatable("drunsk.screen.online"));
     }
 
     @Override
@@ -35,56 +35,43 @@ public final class PassportBookScreen extends DrunskScreen {
     @Override
     public void tick() {
         super.tick();
-        // light refresh every 5 s while open / лёгкое обновление раз в 5 с
-        if (System.currentTimeMillis() - lastRefresh > 5000) {
-            lastRefresh = System.currentTimeMillis();
-            DrunskState.get().refreshList(null);
-        }
+        // presence pushes update DrunskState for free; only refresh the roster
+        // / presence приходит пушами — обновляем только список паспортов
+        online = DrunskState.get().passports().stream().filter(DrunskState.Passport::online).toList();
     }
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partial) {
         super.extractRenderState(g, mouseX, mouseY, partial);
-        centered(g, ChatFormatting.GOLD + I18n.get("drunsk.screen.book"), width / 2, 16, 0xFFFFD700);
-        List<DrunskState.Passport> list = DrunskState.get().passports();
+        centered(g, ChatFormatting.GOLD + I18n.get("drunsk.screen.online"), width / 2, 16, 0xFFFFD700);
+        List<DrunskState.Passport> list = online != null ? online : List.of();
         if (list.isEmpty()) {
-            centered(g, I18n.get("drunsk.book.empty"), width / 2, height / 2, 0xFFAAAAAA);
+            centered(g, I18n.get("drunsk.online.empty"), width / 2, height / 2, 0xFFAAAAAA);
             return;
         }
         int rows = Math.max(1, (height - TOP - 44) / ROW_H);
         scroll = Math.min(scroll, Math.max(0, list.size() - rows));
         int y = TOP;
-        int x = width / 2 - 150;
+        int x = width / 2 - 100;
         for (int i = scroll; i < Math.min(list.size(), scroll + rows); i++) {
             DrunskState.Passport p = list.get(i);
-            boolean hovered = mouseY >= y && mouseY < y + ROW_H;
-            if (hovered) {
-                g.fill(x - 4, y - 1, width - x + 4, y + ROW_H - 1, 0x30FFFFFF);
+            if (mouseY >= y && mouseY < y + ROW_H) {
+                g.fill(x - 4, y - 1, x + 204, y + ROW_H - 1, 0x30FFFFFF);
             }
-            String name = (p.online() ? ChatFormatting.GREEN : ChatFormatting.GRAY) + p.mcNick();
             String disc = p.discordName() != null ? ChatFormatting.DARK_GRAY + " (" + p.discordName() + ")" : "";
-            String bal = p.hidden() || p.balance() == null
-                    ? ChatFormatting.DARK_GRAY + I18n.get("drunsk.passport.hidden_balance")
-                    : ChatFormatting.YELLOW + String.format("%,d", p.balance());
-            text(g, name + disc, x, y + 2, 0xFFFFFFFF);
-            text(g, bal, width - x - font.width(bal), y + 2, 0xFFFFFFFF);
+            text(g, ChatFormatting.GREEN + p.mcNick() + disc, x, y + 2, 0xFFFFFFFF);
             y += ROW_H;
-        }
-        if (list.size() > rows) {
-            centered(g, I18n.get("drunsk.book.scroll", scroll + 1,
-                    (list.size() + rows - 1) / rows), width / 2, height - 42, 0xFF888888);
         }
     }
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        if (event.button() == 0) {
-            List<DrunskState.Passport> list = DrunskState.get().passports();
+        if (event.button() == 0 && online != null) {
             int rows = Math.max(1, (height - TOP - 44) / ROW_H);
             int y = TOP;
-            for (int i = scroll; i < Math.min(list.size(), scroll + rows); i++) {
+            for (int i = scroll; i < Math.min(online.size(), scroll + rows); i++) {
                 if (event.y() >= y && event.y() < y + ROW_H) {
-                    minecraft.gui.setScreen(new PassportScreen(list.get(i).mcNick()));
+                    minecraft.gui.setScreen(new DmScreen(online.get(i).mcNick()));
                     return true;
                 }
                 y += ROW_H;

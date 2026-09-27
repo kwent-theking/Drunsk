@@ -11,7 +11,7 @@ Drunbot, money transfers and casino.
 |---|---|---|---|
 | `mod/` | **Drunsk passports** — паспорта, книга паспортов, переводы, лудка, история; связь через wss-relay | 1.21.11 (Fabric, mojmap, loom 1.13) | kwent |
 | `src/`, `build.gradle` (корень) | **Chekushki** — баланс/переводы/лудка через HTTP API `/botpanel/mod/*` | 26.2 (Fabric, Java 25, loom 1.18.2) | Belmo |
-| `relay/` | Relay-сервер (Node.js) на ВПС 31.77.147.126: мост к MySQL-экономике Друнбота | — | kwent |
+| `relay/` | Relay-сервер (Node.js) на ВПС клана: мост к MySQL-экономике Друнбота | — | kwent |
 
 Деньги ОДНИ на всех: баланс в обоих модах — это та же строка `users.balance` в
 базе Друнбота (`s1_okak`), что и `!баланс` в Discord. Перевод из игры мгновенно
@@ -51,7 +51,7 @@ Discord (Друнбот: !баланс, !дать, !паспорт)  -----------
 - Токен-бакет рейт-лимита (30/с) — ответ об ограничении несёт id запроса, клиент не виснет.
 - 64-битные Discord ID передаются строками (`bigNumberStrings`) — JS-double теряет точность.
 - Relay слушает только 127.0.0.1, наружу — только через Caddy (wss).
-- systemd: `drunsk-relay`, `Restart=always`, креды БД в `/etc/drunsk-relay.env` (root:drunskrelay, 600).
+- systemd: `drunsk-relay`, `Restart=always`, креды БД в `/etc/drunsk-relay.env` (600, только env — в репо не попадают).
 
 ### Сборка / Build
 
@@ -70,8 +70,8 @@ Selftest релея (на ВПС, только против `drunsk_test` — Н
 ### Деплой на ВПС / VPS deploy
 
 - Сервис: `/etc/systemd/system/drunsk-relay.service`, код в `/opt/drunsk-relay/`.
-- Caddy: `handle /drunsk* { reverse_proxy 127.0.0.1:8790 }` → `wss://xn--d1amilgk.online/drunsk`
-  (друнск.online; `31.77.147.126.sslip.io` тоже работает).
+- Caddy: `handle /drunsk* { reverse_proxy 127.0.0.1:8790 }` → `wss://друнск.online/drunsk`
+  (punycode: `xn--d1amilgk.online`).
 - Таблицы релея в `s1_okak`: `drunsk_passports`, `drunsk_pair_codes`, `drunsk_tx`
   (DDL только по своим таблицам — на таблицах бота висит metadata lock).
 - Патч бота: команда `!паспорт` в `main.py` (скрипт `scratchpad/bot/patch_passport.py`,
@@ -91,7 +91,9 @@ Selftest релея (на ВПС, только против `drunsk_test` — Н
 | transfer | toNick, amount | newBalance; пуш `balance_changed` получателю |
 | casino | game, bet, pick? | win, payout, detail, newBalance |
 | history | limit? | последние операции |
-| ping | — | эхо; пуши: `presence`, `balance_changed`, `paired`, `pair_expired` |
+| dm_send | to, text | at; пуш `dm` получателю (и вторым сокетам отправителя) |
+| dm_history | peer | последние 100 сообщений треда, старые первыми |
+| ping | — | эхо; пуши: `presence`, `balance_changed`, `paired`, `pair_expired`, `dm` |
 
 ---
 
