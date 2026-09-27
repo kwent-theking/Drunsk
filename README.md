@@ -9,7 +9,7 @@ Drunbot, money transfers and casino.
 
 | Путь | Что | Версия MC | Автор |
 |---|---|---|---|
-| `mod/` | **Drunsk passports** — паспорта, книга паспортов, переводы, лудка, история; связь через wss-relay | 1.21.11 (Fabric, mojmap, loom 1.13) | kwent |
+| `mod/` | **Drunsk passports** — паспорта, книга паспортов, переводы, лудка, история, ЛС, PvE-утилиты; связь через wss-relay | 26.2 (Fabric, unobfuscated, loom 1.17) | kwent |
 | `src/`, `build.gradle` (корень) | **Chekushki** — баланс/переводы/лудка через HTTP API `/botpanel/mod/*` | 26.2 (Fabric, Java 25, loom 1.18.2) | Belmo |
 | `relay/` | Relay-сервер (Node.js) на ВПС клана: мост к MySQL-экономике Друнбота | — | kwent |
 
@@ -57,15 +57,16 @@ Discord (Друнбот: !баланс, !дать, !паспорт)  -----------
 
 ```
 cd mod
-build.bat        # кэшированный Gradle 9.6.1 + JDK 23; jar -> mod/build/libs/drunsk-1.0.0.jar
+build.bat        # кэшированный Gradle 9.6.1 + JDK 25; jar -> mod/build/libs/drunsk-0.1.0-beta.jar
 ```
 
-Требования мода: Fabric Loader >= 0.19, Fabric API (обязательно), Minecraft ~1.21.11, Java 21+.
+Требования мода: Fabric Loader >= 0.18, Fabric API (обязательно), Minecraft ~26.2, Java 25+.
 
 Selftest релея (на ВПС, только против `drunsk_test` — НЕ против живой базы!):
-`cd /opt/drunsk-relay && node selftest.js` — 37 проверок: привязка, auth,
+`cd /opt/drunsk-relay && node selftest.js` — 45 проверок: привязка, auth,
 переводы (включая 10 параллельных — сохранение денег), лудка (сохранение денег,
-сверка с бухгалтерией `drunsk_tx`), приватность, presence, рейт-лимит, чужой токен.
+сверка с бухгалтерией `drunsk_tx`), приватность, presence, рейт-лимит, чужой
+токен, ЛС (dm_send/dm_history/валидация).
 
 ### Деплой на ВПС / VPS deploy
 
