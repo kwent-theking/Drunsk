@@ -40,7 +40,9 @@ public final class ChatScreen extends DrunskScreen {
         addRenderableWidget(input);
         sendBtn = addRenderableWidget(Button.builder(Component.translatable("drunsk.btn.send"), b -> send())
                 .bounds(cx + 76, height - 34, 60, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("drunsk.btn.back"), b -> onClose())
+        // back → hub / назад → хаб
+        addRenderableWidget(Button.builder(Component.translatable("drunsk.btn.back"), b ->
+                        minecraft.gui.setScreen(new DrunskHubScreen()))
                 .bounds(cx - 49, height - 58, 98, 20).build());
         setInitialFocus(input);
         loadHistory();
@@ -112,5 +114,15 @@ public final class ChatScreen extends DrunskScreen {
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         scroll = Math.max(0, scroll - (int) Math.signum(scrollY));
         return true;
+    }
+
+    @Override
+    public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
+        // Enter sends the message / Enter отправляет сообщение
+        if (event.key() == 257 && input.isFocused()) {
+            send();
+            return true;
+        }
+        return super.keyPressed(event);
     }
 }

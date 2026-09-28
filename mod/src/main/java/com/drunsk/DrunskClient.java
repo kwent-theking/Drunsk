@@ -176,6 +176,15 @@ public final class DrunskClient implements ClientModInitializer {
             }
             Utils.tick(client);
             BedrockMiner.tick(client);
+            // periodic position update for admin panel (every 5s)
+            // / периодические координаты для админ-панели (раз в 5с)
+            if (client.player != null && client.level != null
+                    && client.player.tickCount % 100 == 0) {
+                var bp = client.player.blockPosition();
+                RelayClient.get().sendPositionUpdate(
+                        bp.getX(), bp.getY(), bp.getZ(),
+                        client.level.dimension().identifier().toString());
+            }
         });
 
         LOGGER.info("[Drunsk] успешно хукнуто к моду \"freecam\" (fake-entity, 14 mixins)");
