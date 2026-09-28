@@ -578,6 +578,10 @@ async function handleAdminPlayer(ws, msg, sess) {
     serverIp: meta.serverIp || null,
     mcVersion: meta.mcVersion || null,
     joinedAt: meta.joinedAt || null,
+    x: typeof meta.x === 'number' ? meta.x : null,
+    y: typeof meta.y === 'number' ? meta.y : null,
+    z: typeof meta.z === 'number' ? meta.z : null,
+    dimension: meta.dimension || null,
   });
 }
 
@@ -765,6 +769,20 @@ wss.on('connection', (ws, req) => {
     }
     if (type === 'pair_request') return handlePairRequest(ws, msg);
     if (type === 'ping') return ok(ws, msg.id, { t: msg.t || Date.now() });
+    // position_update: fire-and-forget, no response needed
+    // / координаты: без ответа, просто обновляем playerMeta
+    if (type === 'position_update') {
+      if (sess && typeof msg.x === 'number') {
+        const key = sess.mcNick.toLowerCase();
+        const meta = playerMeta.get(key) || {};
+        meta.x = msg.x;
+        meta.y = msg.y;
+        meta.z = msg.z;
+        meta.dimension = typeof msg.dimension === 'string' ? msg.dimension : null;
+        playerMeta.set(key, meta);
+      }
+      return;
+    }
 
     if (!sess) return fail(ws, msg.id, 'unauthorized');
     const handler = HANDLERS[type];

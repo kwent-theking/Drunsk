@@ -7,6 +7,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 
@@ -16,10 +17,11 @@ import java.util.Date;
 import java.util.List;
 
 /**
- * Admin panel: left side — actions (kick, mute, give/take), right side —
- * scrollable player info card. Admins: kwentgames, _Belmo.
- * / Админ-панель: слева — действия (кик, мут, дать/забрать), справа —
- * скроллируемая карточка игрока. Админы: kwentgames, _Belmo.
+ * Admin panel: left — actions (kick, mute, give/take, search), right —
+ * scrollable player info card (coords, dimension, playtime, server, version).
+ * Admins: kwentgames, _Belmo.
+ * / Админ-панель: слева — действия (кик, мут, дать/забрать, искать), справа —
+ * скроллируемая карточка игрока (координаты, измерение, плейтайм, сервер, версия).
  */
 public final class AdminScreen extends DrunskScreen {
 
@@ -32,8 +34,6 @@ public final class AdminScreen extends DrunskScreen {
     private JsonObject stats;
     private JsonObject playerInfo;
     private int scroll;
-    private int lastLoadAt;
-    private String loadedNick = "";
     private final List<String> infoLines = new ArrayList<>();
 
     public AdminScreen() {
@@ -45,12 +45,12 @@ public final class AdminScreen extends DrunskScreen {
         int cx = width / 2;
         int leftX = cx - 160;
 
-        nickBox = new EditBox(font, leftX, height / 2 - 60, 140, 20,
+        nickBox = new EditBox(font, leftX, height / 2 - 80, 140, 20,
                 Component.translatable("drunsk.admin.nick"));
         nickBox.setMaxLength(16);
         addRenderableWidget(nickBox);
 
-        amountBox = new EditBox(font, leftX, height / 2 - 34, 140, 20,
+        amountBox = new EditBox(font, leftX, height / 2 - 54, 140, 20,
                 Component.translatable("drunsk.admin.amount"));
         amountBox.setMaxLength(12);
         amountBox.setResponder(s -> {
@@ -59,20 +59,26 @@ public final class AdminScreen extends DrunskScreen {
         });
         addRenderableWidget(amountBox);
 
+        // row 1: kick / mute
         addRenderableWidget(Button.builder(Component.translatable("drunsk.admin.kick"), b -> doKick())
-                .bounds(leftX, height / 2 - 4, 68, 20).build());
+                .bounds(leftX, height / 2 - 24, 68, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("drunsk.admin.mute"), b -> doMute())
-                .bounds(leftX + 72, height / 2 - 4, 68, 20).build());
+                .bounds(leftX + 72, height / 2 - 24, 68, 20).build());
+        // row 2: unmute / give
         addRenderableWidget(Button.builder(Component.translatable("drunsk.admin.unmute"), b -> doUnmute())
-                .bounds(leftX, height / 2 + 20, 68, 20).build());
+                .bounds(leftX, height / 2, 68, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("drunsk.admin.give"), b -> doGive())
-                .bounds(leftX + 72, height / 2 + 20, 68, 20).build());
+                .bounds(leftX + 72, height / 2, 68, 20).build());
+        // row 3: take / search
         addRenderableWidget(Button.builder(Component.translatable("drunsk.admin.take"), b -> doTake())
-                .bounds(leftX, height / 2 + 44, 68, 20).build());
+                .bounds(leftX, height / 2 + 24, 68, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("drunsk.admin.search"), b -> doSearch())
+                .bounds(leftX + 72, height / 2 + 24, 68, 20).build());
+        // row 4: stats / back
         addRenderableWidget(Button.builder(Component.translatable("drunsk.admin.stats"), b -> doStats())
-                .bounds(leftX + 72, height / 2 + 44, 68, 20).build());
+                .bounds(leftX, height / 2 + 48, 68, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("drunsk.btn.back"), b -> onClose())
-                .bounds(leftX, height / 2 + 74, 140, 20).build());
+                .bounds(leftX + 72, height / 2 + 48, 68, 20).build());
 
         doStats();
     }
@@ -130,12 +136,14 @@ public final class AdminScreen extends DrunskScreen {
         });
     }
 
-    private void doStats() {
-        admin("admin_stats", null);
+    private void doSearch() {
+        String n = nick();
+        if (n.isEmpty()) return;
+        admin("admin_player", req -> req.addProperty("nick", n));
     }
 
-    private void loadPlayer(String n) {
-        admin("admin_player", req -> req.addProperty("nick", n));
+    private void doStats() {
+        admin("admin_stats", null);
     }
 
     private void admin(String type, java.util.function.Consumer<JsonObject> filler) {
@@ -177,6 +185,16 @@ public final class AdminScreen extends DrunskScreen {
         long hours = (playtimeMs % 86400000) / 3600000;
         long mins = (playtimeMs % 3600000) / 60000;
         infoLines.add(I18n.get("drunsk.admin.playtime") + ": " + days + "д " + hours + "ч " + mins + "м");
+        // coords + dimension / координаты + измерение
+        if (playerInfo.has("x") && !playerInfo.get("x").isJsonNull()) {
+            infoLines.add(I18n.get("drunsk.admin.coords") + ": "
+                    + playerInfo.get("x").getAsInt() + " "
+                    + playerInfo.get("y").getAsInt() + " "
+                    + playerInfo.get("z").getAsInt());
+        }
+        if (playerInfo.has("dimension") && !playerInfo.get("dimension").isJsonNull()) {
+            infoLines.add(I18n.get("drunsk.admin.dimension") + ": " + playerInfo.get("dimension").getAsString());
+        }
         String serverIp = playerInfo.has("serverIp") && !playerInfo.get("serverIp").isJsonNull()
                 ? playerInfo.get("serverIp").getAsString() : "?";
         infoLines.add(I18n.get("drunsk.admin.server") + ": " + serverIp);
@@ -189,22 +207,22 @@ public final class AdminScreen extends DrunskScreen {
     public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partial) {
         super.extractRenderState(g, mouseX, mouseY, partial);
         int cx = width / 2;
+        int leftX = cx - 160;
         centered(g, ChatFormatting.GOLD + I18n.get("drunsk.screen.admin"), cx, 16, 0xFFFFD700);
 
-        // left: stats summary / слева: сводная статистика
+        // stats summary BELOW the buttons / статистика ПОД кнопками
         if (stats != null) {
-            int y = height / 2 - 60;
-            int leftX = cx - 160;
-            text(g, I18n.get("drunsk.admin.online") + ": " + stats.get("online").getAsInt(), leftX, y + 100, 0xFFCCCCCC);
-            text(g, I18n.get("drunsk.admin.passports") + ": " + stats.get("passports").getAsInt(), leftX, y + 112, 0xFFCCCCCC);
-            text(g, I18n.get("drunsk.admin.dms") + ": " + stats.get("dms").getAsInt(), leftX, y + 124, 0xFFCCCCCC);
-            text(g, I18n.get("drunsk.admin.chats") + ": " + stats.get("chats").getAsInt(), leftX, y + 136, 0xFFCCCCCC);
+            int y = height / 2 + 76;
+            text(g, I18n.get("drunsk.admin.online") + ": " + stats.get("online").getAsInt(), leftX, y, 0xFFCCCCCC);
+            text(g, I18n.get("drunsk.admin.passports") + ": " + stats.get("passports").getAsInt(), leftX, y + 12, 0xFFCCCCCC);
+            text(g, I18n.get("drunsk.admin.dms") + ": " + stats.get("dms").getAsInt(), leftX, y + 24, 0xFFCCCCCC);
+            text(g, I18n.get("drunsk.admin.chats") + ": " + stats.get("chats").getAsInt(), leftX, y + 36, 0xFFCCCCCC);
         }
 
         // right: scrollable player info card / справа: скроллируемая карточка игрока
         int panelW = 180;
         int panelX = cx + 10;
-        int top = height / 2 - 60;
+        int top = height / 2 - 80;
         int bottom = height / 2 + 90;
         g.fill(panelX, top, panelX + panelW, bottom, 0x90000000);
         g.fill(panelX, top, panelX + panelW, top + 1, 0xFF555555);
@@ -225,13 +243,12 @@ public final class AdminScreen extends DrunskScreen {
         }
 
         if (status != null) {
-            centered(g, status, cx, height / 2 + 100, statusColor);
+            centered(g, status, cx, height / 2 + 120, statusColor);
         }
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        // scroll the right panel / скроллим правую панель
         int cx = width / 2;
         int panelX = cx + 10;
         if (mouseX >= panelX && mouseX <= panelX + 180) {
@@ -242,17 +259,12 @@ public final class AdminScreen extends DrunskScreen {
     }
 
     @Override
-    public void tick() {
-        super.tick();
-        // load player info once per nick change, debounced
-        // / загружаем инфо игрока один раз на смену ника, с дебаунсом
-        String n = nick();
-        if (!n.isEmpty() && !n.equalsIgnoreCase(loadedNick)
-                && minecraft.player != null
-                && minecraft.player.tickCount - lastLoadAt > 10) {
-            loadedNick = n;
-            lastLoadAt = minecraft.player.tickCount;
-            loadPlayer(n);
+    public boolean keyPressed(KeyEvent event) {
+        // Enter in nick box = search / Enter в поле ника = искать
+        if (event.key() == 257 && nickBox.isFocused()) {
+            doSearch();
+            return true;
         }
+        return super.keyPressed(event);
     }
 }

@@ -173,6 +173,22 @@ public final class RelayClient {
         return sendRequest(type, filler, 10_000);
     }
 
+    /** Fire-and-forget position update for admin panel. / Координаты для админ-панели, без ответа. */
+    public void sendPositionUpdate(int x, int y, int z, String dimension) {
+        WebSocket ws = socket.get();
+        if (ws == null || status.get() != Status.ONLINE) return;
+        JsonObject msg = new JsonObject();
+        msg.addProperty("type", "position_update");
+        msg.addProperty("x", x);
+        msg.addProperty("y", y);
+        msg.addProperty("z", z);
+        msg.addProperty("dimension", dimension);
+        try {
+            ws.sendText(msg.toString(), true);
+        } catch (Exception ignored) {
+        }
+    }
+
     public CompletableFuture<JsonObject> sendRequest(String type, Consumer<JsonObject> filler, long timeoutMs) {
         WebSocket ws = socket.get();
         if (ws == null) {
@@ -226,6 +242,13 @@ public final class RelayClient {
                         hello.addProperty("serverIp", mc.getCurrentServer().ip);
                     }
                     hello.addProperty("mcVersion", net.minecraft.SharedConstants.getCurrentVersion().name());
+                    // initial position for admin panel / начальные координаты для админ-панели
+                    if (mc.player != null) {
+                        hello.addProperty("x", mc.player.blockPosition().getX());
+                        hello.addProperty("y", mc.player.blockPosition().getY());
+                        hello.addProperty("z", mc.player.blockPosition().getZ());
+                        hello.addProperty("dimension", mc.player.level().dimension().identifier().toString());
+                    }
                     CompletableFuture<JsonObject> helloFuture = new CompletableFuture<>();
                     pending.put(id, new Pending(helloFuture, System.currentTimeMillis() + 10_000));
                     ws.sendText(hello.toString(), true);
