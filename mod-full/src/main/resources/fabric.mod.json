@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "drunsk_full",
+  "provides": ["drunsk"],
+  "version": "${version}",
+  "name": "Drunsk",
+  "authors": ["kwent"],
+  "contact": {},
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.drunsk.DrunskClient"],
+    "modmenu": ["com.drunsk.ui.ModMenuBridge"]
+  },
+  "mixins": [
+    "drunsk.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "minecraft": "~${minecraft_version}",
+    "java": ">=25",
+    "fabric-api": "*"
+  },
+  "recommends": {
+    "yet_another_config_lib_v3": "*",
+    "modmenu": "*"
+  }
+}
