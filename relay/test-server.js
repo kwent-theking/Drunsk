@@ -51,10 +51,16 @@ wss.on('connection', ws => {
       if (msg.challenge !== challenge) return fail(ws, msg.id, 'bad_challenge');
       session = { id: crypto.randomUUID(), nick, sodiumPresent: sodium.present, sodiumVersion: sodium.version || null };
       sessions.set(session.id, session);
+      const sodiumStatus = session.sodiumPresent ? 'present' : 'missing';
+      const chatLine = session.sodiumPresent
+        ? `Drunsk client confirmed. Sodium detected${session.sodiumVersion ? ` (${session.sodiumVersion})` : ''}.`
+        : 'Drunsk client confirmed. Sodium is not installed.';
       return ok(ws, msg.id, {
         type: 'handshake_result', protocol: PROTOCOL, sessionId: session.id,
-        mcVersion: '26.2', sodium: { present: session.sodiumPresent, version: session.sodiumVersion },
-        message: `Drunsk handshake OK: Sodium ${session.sodiumPresent ? 'present' : 'missing'}`,
+        mcVersion: '26.2', drunskClient: true,
+        sodium: { present: session.sodiumPresent, version: session.sodiumVersion },
+        message: `Drunsk handshake OK: Sodium ${sodiumStatus}`,
+        chatLine,
       });
     }
     if (msg.type === 'ping') return ok(ws, msg.id, { type: 'pong', t: msg.t ?? null });
