@@ -1,6 +1,8 @@
 package com.drunsk.utils.freecam;
 
 import com.drunsk.DrunskConfig;
+import com.drunsk.DrunskClient;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.ClientInput;
@@ -18,6 +20,7 @@ import net.minecraft.world.entity.player.Input;
 public final class Freecam {
 
     private static final Minecraft MC = Minecraft.getInstance();
+
 
     private static boolean enabled = false;
     private static boolean disableNextTick = false;
@@ -51,6 +54,11 @@ public final class Freecam {
     }
 
     public static void toggle() {
+        if (!enabled && externalFreecamInstalled()) {
+            DrunskClient.LOGGER.warn("[Drunsk] external Freecam detected; built-in Freecam remains disabled to prevent mixin/camera conflicts");
+            sendOverlayMessage(Component.translatable("drunsk.utils.freecam.external_detected"));
+            return;
+        }
         if (enabled) {
             onDisableFreecam();
             enabled = false;
@@ -151,6 +159,13 @@ public final class Freecam {
 
     public static boolean shouldDisableOnDamage() {
         return DrunskConfig.util.freecamDisableOnDamage;
+    }
+
+    private static boolean externalFreecamInstalled() {
+        if (!DrunskConfig.util.externalFreecamPreferred) return false;
+        return FabricLoader.getInstance().isModLoaded("freecam")
+                || FabricLoader.getInstance().isModLoaded("phantomlib")
+                || FabricLoader.getInstance().isModLoaded("freecammod");
     }
 
     private static void sendOverlayMessage(Component message) {

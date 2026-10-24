@@ -11,6 +11,7 @@ import com.drunsk.ui.UtilsScreen;
 import com.drunsk.utils.BedrockMiner;
 import com.drunsk.utils.Utils;
 import com.drunsk.utils.freecam.Freecam;
+import com.drunsk.update.DrunskUpdateChecker;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
@@ -29,6 +30,7 @@ import net.minecraft.world.phys.HitResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 /**
  * Drunsk client mod entry. / Точка входа клиентского мода Drunsk.
  *
@@ -39,6 +41,9 @@ public final class DrunskClient implements ClientModInitializer {
 
     public static final String MOD_ID = "drunsk";
     public static final Logger LOGGER = LoggerFactory.getLogger("drunsk");
+    private static boolean debugEnabled() {
+        return DrunskConfig.util.debug || Boolean.getBoolean("drunsk.debug");
+    }
 
     private static KeyMapping passportKey;
     private static KeyMapping utilsKey;
@@ -51,9 +56,18 @@ public final class DrunskClient implements ClientModInitializer {
     private static KeyMapping toolKey;
     private static KeyMapping blockKey;
 
+    /** BedrockMiner instance, created per-player on JOIN. / Экземпляр бедрок-майнера, создаётся на JOIN. */
+    public static BedrockMiner bedrockMiner;
+
     @Override
     public void onInitializeClient() {
         DrunskConfig.load();
+        if (!DrunskConfig.util.autoUpdatePromptShown) {
+            LOGGER.info("[Drunsk] auto-update is disabled until the user enables it in Utilities (one-time prompt pending)");
+            DrunskConfig.util.autoUpdatePromptShown = true;
+            DrunskConfig.save();
+        }
+        DrunskUpdateChecker.checkAsync();
 
         KeyMapping.Category category = KeyMapping.Category.register(
                 Identifier.fromNamespaceAndPath(MOD_ID, "main"));
@@ -102,11 +116,18 @@ public final class DrunskClient implements ClientModInitializer {
             if (nick != null) {
                 RelayClient.get().connect(nick);
             }
+            // create bedrock miner instance per join / создаём экземпляр на каждый JOIN
+            if (client.player != null) {
+                bedrockMiner = new BedrockMiner(client.player);
+                debug("join player={} dimension={} position={}", client.player.getGameProfile().name(),
+                        client.level == null ? "null" : client.level.dimension().identifier(), client.player.blockPosition());
+            }
         });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
             RelayClient.get().disconnect();
             Freecam.onDisconnect();
-            BedrockMiner.reset();
+            if (bedrockMiner != null) bedrockMiner.reset();
+            bedrockMiner = null;
             Utils.reset();
         });
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
@@ -127,10 +148,33 @@ public final class DrunskClient implements ClientModInitializer {
                 openUtils();
             }
             while (freecamKey.consumeClick()) {
-                if (client.level != null) Freecam.toggle();
+                if (client.level != null) {
+                    if (DrunskConfig.util.externalFreecamPreferred &&
+                            (net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("freecam")
+                                    || net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("phantomlib")
+                                    || net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("freecammod"))) {
+                        LOGGER.warn("[Drunsk] external Freecam is installed; Drunsk Freecam toggle skipped");
+                        client.player.sendOverlayMessage(Component.translatable("drunsk.utils.freecam.external_detected"));
+                    } else {
+                        Freecam.toggle();
+                    }
+                }
             }
             while (minerKey.consumeClick()) {
-                if (client.player != null) BedrockMiner.toggleArmed(client.player);
+                if (bedrockMiner != null && client.player != null) {
+                    if (!DrunskConfig.util.bedrockMiner) {
+                        client.player.sendOverlayMessage(Component.translatable("drunsk.utils.miner.disabled_hint"));
+                    } else {
+                        // toggle armed state / взвести/снять
+                        if (bedrockMiner.isArmed()) {
+                            bedrockMiner.reset();
+                            client.player.sendOverlayMessage(Component.translatable("drunsk.utils.miner.disarmed"));
+                        } else {
+                            bedrockMiner.arm();
+                            client.player.sendOverlayMessage(Component.translatable("drunsk.utils.miner.armed"));
+                        }
+                    }
+                }
             }
             while (fishKey.consumeClick()) {
                 DrunskConfig.util.autoFish = !DrunskConfig.util.autoFish;
@@ -175,7 +219,17 @@ public final class DrunskClient implements ClientModInitializer {
                                 .append(": ").append(DrunskConfig.util.autoBlock ? "ON" : "OFF"));
             }
             Utils.tick(client);
-            BedrockMiner.tick(client);
+            if (bedrockMiner != null) bedrockMiner.tick();
+            if (debugEnabled() && client.player != null && client.player.tickCount % 100 == 0) {
+                debug("heartbeat tick={} player={} pos={} screen={} minerEnabled={} minerArmed={} minerRunning={} modes=[fish:{},totem:{},eat:{},tool:{},block:{}]",
+                        client.player.tickCount, client.player.getGameProfile().name(), client.player.blockPosition(),
+                        client.gui.screen(), DrunskConfig.util.bedrockMiner,
+                        bedrockMiner != null && bedrockMiner.isArmed(),
+                        bedrockMiner != null && bedrockMiner.isRunning(),
+                        DrunskConfig.util.autoFishPacket, DrunskConfig.util.autoTotemPacket,
+                        DrunskConfig.util.autoEatPacket, DrunskConfig.util.autoToolPacket,
+                        DrunskConfig.util.autoBlockPacket);
+            }
             // periodic position update for admin panel (every 5s)
             // / периодические координаты для админ-панели (раз в 5с)
             if (client.player != null && client.level != null
@@ -196,6 +250,10 @@ public final class DrunskClient implements ClientModInitializer {
         LOGGER.info("[Drunsk] успешно хукнуто к моду \"auto-tool\" (destroy-speed)");
         LOGGER.info("[Drunsk] успешно хукнуто к моду \"auto-block\" (stack-swap)");
         LOGGER.info("[Drunsk] успешно хукнуто к моду \"dm\" (relay queue)");
+    }
+
+    private static void debug(String message, Object... args) {
+        if (debugEnabled()) LOGGER.info(message, args);
     }
 
     private static void onPress(Minecraft client) {

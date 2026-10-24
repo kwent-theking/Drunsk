@@ -8,6 +8,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -36,6 +37,10 @@ public final class DrunskConfig {
     public static final class Util {
         // toggles / переключатели
         public boolean autoFish, autoTotem, gamma, freecam, bedrockMiner, autoEat, autoTool, autoBlock;
+        public boolean debug = false;
+        public boolean autoUpdate = false;
+        public boolean autoUpdatePromptShown = false;
+        public boolean externalFreecamPreferred = true;
         // packet vs vanilla per module / пакетный против ванильного по модулям
         // (bedrock miner is packet-only, freecam has no mode toggle)
         public boolean autoFishPacket = true, autoTotemPacket = true,
@@ -98,6 +103,10 @@ public final class DrunskConfig {
         util.autoEat = optBool(u, "autoEat", false);
         util.autoTool = optBool(u, "autoTool", false);
         util.autoBlock = optBool(u, "autoBlock", false);
+        util.debug = optBool(u, "debug", false);
+        util.autoUpdate = optBool(u, "autoUpdate", false);
+        util.autoUpdatePromptShown = optBool(u, "autoUpdatePromptShown", false);
+        util.externalFreecamPreferred = optBool(u, "externalFreecamPreferred", true);
         util.autoFishPacket = optBool(u, "autoFishPacket", true);
         util.autoTotemPacket = optBool(u, "autoTotemPacket", true);
         util.autoEatPacket = optBool(u, "autoEatPacket", true);
@@ -123,6 +132,10 @@ public final class DrunskConfig {
             tokens.forEach(t::addProperty);
             root.add("tokens", t);
             JsonObject u = new JsonObject();
+            u.addProperty("debug", util.debug);
+            u.addProperty("autoUpdate", util.autoUpdate);
+            u.addProperty("autoUpdatePromptShown", util.autoUpdatePromptShown);
+            u.addProperty("externalFreecamPreferred", util.externalFreecamPreferred);
             u.addProperty("autoFish", util.autoFish);
             u.addProperty("autoTotem", util.autoTotem);
             u.addProperty("gamma", util.gamma);
@@ -151,6 +164,10 @@ public final class DrunskConfig {
         } catch (Exception e) {
             DrunskClient.LOGGER.warn("config save failed", e);
         }
+    }
+
+    public static Path updateDirectory() {
+        return FabricLoader.getInstance().getConfigDir().resolve("drunsk-updates");
     }
 
     public static String tokenFor(String nick) {

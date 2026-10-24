@@ -1,7 +1,12 @@
 package com.drunsk.utils;
 
 import com.drunsk.DrunskConfig;
+import com.drunsk.DrunskClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -10,7 +15,6 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
-import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -18,7 +22,6 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -31,363 +34,420 @@ import java.util.List;
 
 /**
  * TNT-less bedrock breaking via the piston head-clip method.
- * Full port of rockerle/BedrockMiner Miner.java (MIT) to 26.2 mojmap.
- * / Ломание бедрока поршнем. Полный порт Miner.java из BedrockMiner (MIT).
+ * Literal port of rockerle/BedrockMiner Miner.java (MIT), yarn→mojmap only.
+ * / Ломание бедрока поршнем. Буквальный порт Miner.java (MIT), только yarn→mojmap.
  */
-public final class BedrockMiner {
+public class BedrockMiner {
 
-    private enum Task { INIT, PLACE_PISTON, REDSTONE_TORCH, ROTATE_PLAYER, SWITCH_TO_PICK, MINE_PISTON, MINE_SUPPORT, NOTHING }
-
-    private static final List<Item> ALLOWED_TOOLS = List.of(Items.NETHERITE_PICKAXE, Items.DIAMOND_PICKAXE);
-    private static final List<Item> SUPPORT_BLOCKS = List.of(Items.SLIME_BLOCK, Items.NETHERRACK);
-    private static final List<Block> TARGET_BLOCKS = new ArrayList<>(List.of(Blocks.BEDROCK));
-
-    private static Task task = Task.NOTHING;
-    private static boolean running;
-    private static boolean armed;
-    private static BlockPos bedrockPos;
-    private static BlockPos supportPos;
-    private static BlockPos torchPos;
-    private static PistonPlacement piston;
-    private static Item pistonType;
-    private static Item pickaxeType;
-    private static Direction toFace;
-    private static boolean placedPiston, placedTorch;
-    private static int failed;
-
-    private record PistonPlacement(BlockPos pos, Direction dir) {
+    private static final Logger LOGGER = LoggerFactory.getLogger("drunsk/bedrock-miner");
+    private static boolean debugEnabled() {
+        return DrunskConfig.util.debug || Boolean.getBoolean("drunsk.debug");
     }
 
-    private BedrockMiner() {
+    private Task currentTask;
+    private final LocalPlayer player;
+    private final ClientPacketListener netHandler;
+    private final MultiPlayerGameMode interactionManager;
+    private Direction toFace;
+    private boolean alreadyRunning;
+    private boolean armed;
+    private BlockPos bedrockBlock;
+    private BlockPos supportBlock;
+    private BlockPos torchPos;
+    private PistonPlacement pistonPlacement;
+    private Item pistonType, pickaxeType;
+    private boolean[] checks = {false, false}; //checklist for pistonplacement,torchplacement,
+    private int failedCounter = -1;
+
+    private final List<Item> allowedTools = List.of(Items.NETHERITE_PICKAXE, Items.DIAMOND_PICKAXE);
+    private List<Item> allowedSupportBlocks = List.of(Items.SLIME_BLOCK, Items.NETHERRACK);
+    private List<Block> allowedBlocksToMine = new ArrayList<>(List.of(Blocks.BEDROCK));
+
+    public BedrockMiner(LocalPlayer player) {
+        this.player = player;
+        this.netHandler = player.connection;
+        this.interactionManager = Minecraft.getInstance().gameMode;
+        this.alreadyRunning = false;
+        this.currentTask = Task.NOTHING;
     }
 
-    public static void reset() {
-        task = Task.NOTHING;
-        running = false;
-        bedrockPos = null;
-        supportPos = null;
-        torchPos = null;
-        piston = null;
-        pistonType = null;
-        pickaxeType = null;
-        toFace = null;
-        placedPiston = placedTorch = false;
-        failed = 0;
+    /** Bridge used by the MultiPlayerGameMode mixin. / Мост для mixin. */
+    public static boolean onClickedBlock(Minecraft mc, BlockPos pos, Direction direction) {
+        BedrockMiner miner = DrunskClient.bedrockMiner;
+        if (miner == null || mc.player == null || !DrunskConfig.util.bedrockMiner
+                || !miner.isArmed() || miner.isRunning()) {
+            return false;
+        }
+        if (!miner.getTargetBlocks().contains(mc.level.getBlockState(pos).getBlock())) {
+            return false;
+        }
+        miner.start(pos, direction);
+        return miner.isRunning();
     }
 
-    public static void toggleArmed(LocalPlayer player) {
-        if (!DrunskConfig.util.bedrockMiner) {
-            player.sendOverlayMessage(Component.translatable("drunsk.utils.miner.disabled_hint"));
+    //-------------------- Miner ---------------------------------------
+    public void tick() {
+        if (debugEnabled() && currentTask != Task.NOTHING) {
+            LOGGER.info("tick task={} armed={} running={} bedrock={} piston={} torch={} support={} failed={}",
+                    currentTask, armed, alreadyRunning, bedrockBlock, pistonPlacement, torchPos, supportBlock, failedCounter);
+        }
+        switch (currentTask) {
+            case INIT -> {
+                if (failedCounter > 0) {
+                    player.sendOverlayMessage(Component.translatable("drunsk.utils.miner.no_spot"));
+                    this.reset();
+                    break;
+                }
+                if (pistonPlacement != null)
+                    torchPos = findRedstoneTorchPlace(pistonPlacement.pos(), pistonPlacement.dir());
+                if (pistonPlacement != null && torchPos != null) {
+                    this.toFace = pistonPlacement.dir().getOpposite();
+                    this.currentTask = Task.ROTATEPLAYER;
+                    break;
+                }
+                if (pistonPlacement == null || torchPos == null) {
+                    failedCounter++;
+                }
+            }
+            case PLACEPISTON -> {
+                placePiston(pistonPlacement.pos, pistonPlacement.dir().getOpposite());
+                if (torchPos != null && pistonPlacement != null) {
+                    this.currentTask = Task.ROTATEPLAYER;
+                    toFace = Direction.DOWN;
+                    checks[0] = true;
+                }
+            }
+            case REDSTONETORCH -> {
+                if (supportBlock != null) {
+                    selectItem(null, allowedSupportBlocks);
+                    placeBlock(supportBlock);
+                }
+                if (torchPos != null && checks[0] && !checks[1]) {
+                    selectItem(null, Items.REDSTONE_TORCH);
+                    placeBlock(torchPos);
+                    checks[1] = true;
+                    BlockPos dirPos = pistonPlacement.pos.subtract(bedrockBlock);
+                    toFace = Direction.getNearest(dirPos.getX(), dirPos.getY(), dirPos.getZ(), player.getDirection());
+                    this.currentTask = Task.ROTATEPLAYER;
+                }
+            }
+            case ROTATEPLAYER -> {
+                if (toFace != null) {
+                    netHandler.send(
+                            new ServerboundMovePlayerPacket.Rot(
+                                    dirToYaw(toFace),
+                                    dirToPitch(toFace),
+                                    player.onGround(),
+                                    player.horizontalCollision));
+                    if (!checks[0] && !checks[1])
+                        this.currentTask = Task.PLACEPISTON;
+                    if (checks[0] && !checks[1]) {
+                        this.currentTask = Task.REDSTONETORCH;
+                        this.toFace = Direction.DOWN;
+                    }
+                    if (checks[0] && checks[1])
+                        this.currentTask = Task.SWITCHTOPICK;
+                } else {
+                    player.sendOverlayMessage(Component.literal("Direction to rotate was null"));
+                    this.reset();
+                }
+            }
+            case SWITCHTOPICK -> {
+                toFace = pistonPlacement.dir().getOpposite();
+                if (selectItem(getEfficiencyHolder(), pickaxeType)) {
+                    this.currentTask = Task.MINEPISTON;
+                } else {
+                    player.sendOverlayMessage(Component.translatable("drunsk.utils.miner.no_pickaxe"));
+                    this.reset();
+                }
+            }
+            case MINEPISTON -> {
+                if (failedCounter > 0 || this.pistonPlacement == null) {
+                    this.reset();
+                    break;
+                }
+                if (player.level().getBlockState(this.pistonPlacement.pos()).getBlock() == Blocks.MOVING_PISTON) {
+                    player.sendOverlayMessage(Component.translatable("drunsk.utils.miner.too_late"));
+                    failedCounter++;
+                    break;
+                }
+
+                if (player.level().getBlockState(this.pistonPlacement.pos()).getValue(BlockStateProperties.EXTENDED)) {
+                    mineBedrock();
+                } else {
+                    failedCounter++;
+                    break;
+                }
+                if (this.supportBlock == null)
+                    this.reset();
+                else
+                    this.currentTask = Task.MINESUPPORT;
+                checks[0] = checks[1] = false;
+            }
+            case MINESUPPORT -> {
+                breakBlock(supportBlock);
+                this.reset();
+            }
+            case NOTHING -> {
+                checks[0] = checks[1] = false;
+                this.alreadyRunning = false;
+                this.failedCounter = 0;
+                this.bedrockBlock = null;
+                this.supportBlock = null;
+            }
+        }
+    }
+
+    public void start(BlockPos bp, Direction offsetDir) {
+        debug("start target={} offset={} player={} dimension={}", bp, offsetDir, player.blockPosition(), player.level().dimension().identifier());
+        this.currentTask = Task.INIT;
+        this.bedrockBlock = bp;
+        this.alreadyRunning = true;
+        this.pistonPlacement = new PistonPlacement(
+                bp.relative(offsetDir),
+                player.level().getBlockState(bp.relative(offsetDir).relative(Direction.UP)).isAir()
+                        ? Direction.UP : canPistonExtend(bp.relative(offsetDir)));
+        if (this.pistonPlacement != null && (this.pistonPlacement.pos().equals(player.blockPosition())
+                || player.level().isOutsideBuildHeight(this.pistonPlacement.pos())))
+            this.pistonPlacement = null;
+        if (!checkPickaxe()) {
+            player.sendOverlayMessage(Component.translatable("drunsk.utils.miner.no_pickaxe"));
+            this.reset();
             return;
         }
-        armed = !armed;
-        if (!armed) reset();
-        player.sendOverlayMessage(Component.translatable(
-                armed ? "drunsk.utils.miner.armed" : "drunsk.utils.miner.disarmed"));
+        if (this.pistonPlacement == null || this.pistonPlacement.dir() == null) {
+            player.sendOverlayMessage(Component.translatable("drunsk.utils.miner.no_spot"));
+            this.reset();
+            return;
+        }
+        if (player.getInventory().contains(Items.PISTON.getDefaultInstance())) {
+            int s = getSlotWithItem(Items.PISTON);
+            if (s > -1) {
+                if (player.getInventory().getItem(s).getCount() >= 2) {
+                    this.pistonType = Items.PISTON;
+                    this.currentTask = Task.INIT;
+                    return;
+                }
+            }
+        }
+        if (player.getInventory().contains(Items.STICKY_PISTON.getDefaultInstance())) {
+            int s = getSlotWithItem(Items.STICKY_PISTON);
+            if (s > -1 && player.getInventory().getItem(s).getCount() >= 2) {
+                this.pistonType = Items.STICKY_PISTON;
+                this.currentTask = Task.INIT;
+                return;
+            }
+        }
+        player.sendOverlayMessage(Component.translatable("drunsk.utils.miner.no_pistons"));
+        this.reset();
     }
 
-    public static boolean isArmed() {
+    public boolean isRunning() {
+        return this.alreadyRunning;
+    }
+
+    public boolean isArmed() {
         return armed;
     }
 
-    public static boolean onClickedBlock(Minecraft mc, BlockPos pos, Direction dir) {
-        if (!armed || running) return running;
-        if (!DrunskConfig.util.bedrockMiner) return false;
-        if (mc.level.getBlockState(pos).getBlock() == Blocks.BEDROCK) {
-            start(mc, pos, dir);
-            return true;
+    public void arm() {
+        this.armed = true;
+    }
+
+    public void reset() {
+        debug("reset task={} target={} failed={}", currentTask, bedrockBlock, failedCounter);
+        this.alreadyRunning = false;
+        this.armed = false;
+        this.bedrockBlock = null;
+        this.supportBlock = null;
+        this.torchPos = null;
+        this.pistonPlacement = null;
+        this.pistonType = null;
+        this.pickaxeType = null;
+        this.toFace = null;
+        this.checks[0] = this.checks[1] = false;
+        this.failedCounter = -1;
+        this.currentTask = Task.NOTHING;
+    }
+
+    //-------------------- Inventory Actions -----------------------------------
+    private boolean checkPickaxe() {
+        var inv = player.getInventory();
+        int pickSlot = -1;
+        ItemStack tempStack;
+        for (int i = 0; i < 36; i++) {
+            tempStack = inv.getItem(i);
+            if (EnchantmentHelper.getItemEnchantmentLevel(getEfficiencyHolder(), tempStack) == 5
+                    && allowedTools.contains(tempStack.getItem())) {
+                pickSlot = i;
+                break;
+            }
+        }
+        if (pickSlot == -1) {
+            player.sendOverlayMessage(Component.translatable("drunsk.utils.miner.no_pickaxe"));
+            return false;
+        }
+        pickaxeType = inv.getItem(pickSlot).getItem();
+        return true;
+    }
+
+    private boolean selectItem(Holder<Enchantment> e, List<Item> items) {
+        for (Item i : items) {
+            if (selectItem(e, i))
+                return true;
         }
         return false;
     }
 
-    private static void start(Minecraft mc, BlockPos pos, Direction offsetDir) {
-        LocalPlayer player = mc.player;
-        if (player == null) return;
-        bedrockPos = pos;
-        failed = 0;
-        placedPiston = placedTorch = false;
-        supportPos = null;
-        torchPos = null;
-
-        if (!checkPickaxe(mc, player)) {
-            player.sendOverlayMessage(Component.translatable("drunsk.utils.miner.no_pickaxe"));
-            bedrockPos = null;
-            return;
-        }
-        if (!findPistons(player)) {
-            player.sendOverlayMessage(Component.translatable("drunsk.utils.miner.no_pistons"));
-            bedrockPos = null;
-            return;
-        }
-
-        BlockPos bodyPos = pos.relative(offsetDir);
-        if (bodyPos.equals(player.blockPosition()) || mc.level.isOutsideBuildHeight(bodyPos)) {
-            piston = null;
-        } else {
-            Direction dir = mc.level.getBlockState(bodyPos.above()).isAir()
-                    ? Direction.UP : pistonExtendDir(mc.level, bodyPos);
-            piston = dir == null ? null : new PistonPlacement(bodyPos, dir);
-        }
-        running = true;
-        task = Task.INIT;
-    }
-
-    public static void tick(Minecraft mc) {
-        if (!running || mc.player == null || mc.level == null) return;
-        try {
-            step(mc);
-        } catch (Exception e) {
-            reset();
-        }
-    }
-
-    private static void step(Minecraft mc) {
-        LocalPlayer player = mc.player;
-        switch (task) {
-            case INIT -> {
-                if (failed > 0) {
-                    player.sendOverlayMessage(Component.translatable("drunsk.utils.miner.no_spot"));
-                    reset();
+    private boolean selectItem(Holder<Enchantment> e, Item item) {
+        var inv = player.getInventory();
+        ItemStack iS;
+        int slot = -1;
+        for (int i = 0; i < 36; i++) {
+            iS = inv.getItem(i);
+            if (iS.is(item)) {
+                if (e == null) {
+                    slot = i;
                     break;
-                }
-                if (piston != null) {
-                    torchPos = findTorchSpot(mc, player, piston.pos(), piston.dir());
-                }
-                if (piston != null && torchPos != null) {
-                    toFace = piston.dir().getOpposite();
-                    task = Task.ROTATE_PLAYER;
-                } else if (piston == null || torchPos == null) {
-                    failed++;
-                }
-            }
-            case PLACE_PISTON -> {
-                placePiston(mc, player, piston.pos(), piston.dir().getOpposite());
-                if (torchPos != null && piston != null) {
-                    task = Task.ROTATE_PLAYER;
-                    toFace = Direction.DOWN;
-                    placedPiston = true;
-                }
-            }
-            case REDSTONE_TORCH -> {
-                if (supportPos != null) {
-                    selectItem(player, SUPPORT_BLOCKS);
-                    placeBlock(mc, player, supportPos);
-                }
-                if (torchPos != null && placedPiston && !placedTorch) {
-                    selectItem(player, Items.REDSTONE_TORCH);
-                    placeBlock(mc, player, torchPos);
-                    placedTorch = true;
-                    BlockPos dirPos = piston.pos().subtract(bedrockPos);
-                    toFace = Direction.getNearest(dirPos.getX(), dirPos.getY(), dirPos.getZ(), player.getDirection());
-                    task = Task.ROTATE_PLAYER;
-                }
-            }
-            case ROTATE_PLAYER -> {
-                if (toFace != null) {
-                    player.connection.send(new ServerboundMovePlayerPacket.Rot(
-                            dirToYaw(toFace, player), dirToPitch(toFace, player),
-                            player.onGround(), player.horizontalCollision));
-                    if (!placedPiston && !placedTorch) {
-                        task = Task.PLACE_PISTON;
-                    } else if (placedPiston && !placedTorch) {
-                        task = Task.REDSTONE_TORCH;
-                        toFace = Direction.DOWN;
-                    } else {
-                        task = Task.SWITCH_TO_PICK;
+                } else {
+                    if (EnchantmentHelper.getItemEnchantmentLevel(e, iS) == 5) {
+                        slot = i;
+                        break;
                     }
-                } else {
-                    reset();
                 }
             }
-            case SWITCH_TO_PICK -> {
-                toFace = piston.dir().getOpposite();
-                if (selectPickaxe(mc, player)) {
-                    task = Task.MINE_PISTON;
-                } else {
-                    player.sendOverlayMessage(Component.translatable("drunsk.utils.miner.no_pickaxe"));
-                    reset();
-                }
-            }
-            case MINE_PISTON -> {
-                if (failed > 0 || piston == null) {
-                    reset();
-                    break;
-                }
-                BlockState st = mc.level.getBlockState(piston.pos());
-                if (st.getBlock() == Blocks.MOVING_PISTON) {
-                    player.sendOverlayMessage(Component.translatable("drunsk.utils.miner.too_late"));
-                    failed++;
-                    break;
-                }
-                if (st.hasProperty(BlockStateProperties.EXTENDED) && st.getValue(BlockStateProperties.EXTENDED)) {
-                    mineBedrock(mc, player);
-                } else {
-                    failed++;
-                    break;
-                }
-                if (supportPos == null) reset();
-                else task = Task.MINE_SUPPORT;
-                placedPiston = placedTorch = false;
-            }
-            case MINE_SUPPORT -> {
-                breakBlock(mc, player, supportPos);
-                reset();
-            }
-            case NOTHING -> reset();
         }
-    }
-
-    private static void mineBedrock(Minecraft mc, LocalPlayer player) {
-        breakBlock(mc, player, torchPos);
-        breakBlock(mc, player, piston.pos());
-        replacePiston(mc, player);
-        if (supportPos != null) {
-            breakBlock(mc, player, supportPos);
-            supportPos = null;
+        if (slot < 0)
+            return false;
+        else if (slot < 9)
+            inv.setSelectedSlot(slot);
+        else {
+            // pickFromInventory → swap to hotbar / свап в хотбар
+            int hotbar = inv.getSuitableHotbarSlot();
+            Utils.swapSlots(Minecraft.getInstance(), slot, hotbar, true);
+            inv.setSelectedSlot(hotbar);
         }
-        breakBlock(mc, player, piston.pos());
-        piston = null;
-        torchPos = null;
+        return true;
     }
 
-    private static void placePiston(Minecraft mc, LocalPlayer player, BlockPos pos, Direction dir) {
-        if (pos == null || dir == null) return;
-        selectItem(player, pistonType);
-        mc.gameMode.useItemOn(player, InteractionHand.MAIN_HAND,
-                new BlockHitResult(Vec3.atCenterOf(pos), dir, pos, true));
+    private int getSlotWithItem(Item item) {
+        var inv = player.getInventory();
+        for (int i = 0; i < 36; i++) {
+            if (inv.getItem(i).is(item)) return i;
+        }
+        return -1;
     }
 
-    private static void replacePiston(Minecraft mc, LocalPlayer player) {
-        if (piston == null) return;
-        int oldSlot = player.getInventory().getSelectedSlot();
-        selectItem(player, pistonType);
-        mc.gameMode.useItemOn(player, InteractionHand.MAIN_HAND,
-                new BlockHitResult(Vec3.atCenterOf(piston.pos()), piston.dir().getOpposite(), piston.pos(), true));
-        player.getInventory().setSelectedSlot(oldSlot);
+    private Holder<Enchantment> getEfficiencyHolder() {
+        return player.level().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Enchantments.EFFICIENCY);
     }
 
-    private static void placeBlock(Minecraft mc, LocalPlayer player, BlockPos pos) {
-        mc.gameMode.useItemOn(player, InteractionHand.MAIN_HAND,
-                new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, true));
-    }
-
-    private static void breakBlock(Minecraft mc, LocalPlayer player, BlockPos pos) {
-        if (pos == null) return;
-        Direction face = player.getDirection();
-        player.connection.send(new ServerboundPlayerActionPacket(
-                ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, pos, face));
-        player.connection.send(new ServerboundPlayerActionPacket(
-                ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, pos, face));
-    }
-
-    private static Direction pistonExtendDir(Level level, BlockPos bodyPos) {
+    //-------------------- Placement Checks ------------------------------------
+    private Direction canPistonExtend(BlockPos pistonBody) {
         for (Direction d : Direction.values()) {
-            if (d == Direction.UP) continue;
-            if (level.getBlockState(bodyPos.relative(d)).canBeReplaced()) {
+            if (d.equals(Direction.UP))
+                continue;
+            if (player.level().getBlockState(pistonBody.relative(d)).canBeReplaced()) {
                 return d;
             }
         }
         return null;
     }
 
-    private static BlockPos findTorchSpot(Minecraft mc, LocalPlayer player, BlockPos bodyPos, Direction facing) {
-        Level level = mc.level;
+    private BlockPos findRedstoneTorchPlace(BlockPos pistonBody, Direction facing) {
         for (Direction d : Direction.values()) {
-            if (d == facing || d == Direction.UP || bodyPos.relative(d).equals(bedrockPos)) continue;
-            BlockPos probe = bodyPos.relative(d);
-            if (!level.getBlockState(probe).isAir()) continue;
-            BlockPos below = probe.below();
-            if (level.getBlockState(below).isFaceSturdy(level, below, Direction.UP)) {
-                return probe;
+            if (d.equals(facing) || d.equals(Direction.UP) || pistonBody.relative(d).equals(bedrockBlock)) {
+                continue;
             }
-            if (level.getBlockState(below).isAir()
-                    && !below.equals(player.blockPosition().above())
-                    && !below.equals(player.blockPosition())
-                    && !level.isOutsideBuildHeight(below)) {
-                supportPos = below;
-                return probe;
+            BlockPos probePos = pistonBody.relative(d);
+            BlockState probeState = player.level().getBlockState(probePos);
+            if (probeState.isAir()) {
+                if (player.level().getBlockState(probePos.below())
+                        .isFaceSturdy(player.level(), probePos.below(), Direction.UP))
+                    return probePos;
+                else if (player.level().getBlockState(probePos.relative(Direction.DOWN)).isAir()
+                        && !probePos.relative(Direction.DOWN).equals(player.blockPosition().above())
+                        && !probePos.relative(Direction.DOWN).equals(player.blockPosition())
+                        && probePos.getY() > -63
+                        && !player.level().isOutsideBuildHeight(probePos)) {
+                    supportBlock = probePos.relative(Direction.DOWN);
+                    return probePos;
+                }
             }
         }
         return null;
     }
 
-    private static boolean checkPickaxe(Minecraft mc, LocalPlayer player) {
-        var inv = player.getInventory();
-        for (int i = 0; i < 36; i++) {
-            ItemStack s = inv.getItem(i);
-            if (s.is(ItemTags.PICKAXES) && efficiencyLevel(mc, s) >= 5) {
-                pickaxeType = s.getItem();
-                return true;
-            }
+    //-------------------- World Interactions ----------------------------------
+    private void mineBedrock() {
+        breakBlock(this.torchPos);
+        breakBlock(this.pistonPlacement.pos());
+        replacePiston(this.pistonPlacement.pos());
+        if (this.supportBlock != null) {
+            breakBlock(this.supportBlock);
+            this.supportBlock = null;
         }
-        return false;
+        breakBlock(this.pistonPlacement.pos());
+        this.pistonPlacement = null;
+        this.torchPos = null;
     }
 
-    private static boolean selectPickaxe(Minecraft mc, LocalPlayer player) {
-        var inv = player.getInventory();
-        for (int i = 0; i < 36; i++) {
-            ItemStack s = inv.getItem(i);
-            if (s.is(ItemTags.PICKAXES) && efficiencyLevel(mc, s) >= 5) {
-                selectSlot(mc, player, i);
-                return true;
-            }
-        }
-        return false;
+    private void placePiston(BlockPos pistonPos, Direction dir) {
+        if (pistonPos == null || dir == null)
+            return;
+        selectItem(null, pistonType);
+        interactionManager.useItemOn(
+                player,
+                player.getUsedItemHand(),
+                new BlockHitResult(Vec3.atCenterOf(pistonPos), dir, pistonPos, true));
     }
 
-    private static int efficiencyLevel(Minecraft mc, ItemStack stack) {
-        Holder<Enchantment> eff = mc.level.registryAccess()
-                .lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Enchantments.EFFICIENCY);
-        return EnchantmentHelper.getItemEnchantmentLevel(eff, stack);
+    private void replacePiston(BlockPos pistonPos) {
+        if (pistonPos == null)
+            return;
+        int oldSlot = player.getInventory().getSelectedSlot();
+        selectItem(null, pistonType);
+        interactionManager.useItemOn(
+                player,
+                player.getUsedItemHand(),
+                new BlockHitResult(Vec3.atCenterOf(pistonPos),
+                        pistonPlacement.dir().getOpposite(),
+                        pistonPos,
+                        true));
+        player.getInventory().setSelectedSlot(oldSlot);
     }
 
-    private static boolean findPistons(LocalPlayer player) {
-        var inv = player.getInventory();
-        for (Item type : List.of(Items.PISTON, Items.STICKY_PISTON)) {
-            for (int i = 0; i < 36; i++) {
-                ItemStack s = inv.getItem(i);
-                if (s.is(type) && s.getCount() >= 2) {
-                    pistonType = type;
-                    return true;
-                }
-            }
-        }
-        return false;
+    private void placeBlock(BlockPos bp) {
+        interactionManager.useItemOn(
+                player,
+                player.getUsedItemHand(),
+                new BlockHitResult(Vec3.atCenterOf(bp), Direction.UP, bp, true));
     }
 
-    private static void selectItem(LocalPlayer player, Item item) {
-        var inv = player.getInventory();
-        for (int i = 0; i < 36; i++) {
-            if (inv.getItem(i).is(item)) {
-                selectSlot(Minecraft.getInstance(), player, i);
-                return;
-            }
-        }
+    private void breakBlock(BlockPos blockPos) {
+        netHandler.send(
+                new ServerboundPlayerActionPacket(
+                        ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, blockPos, player.getDirection()));
+        netHandler.send(
+                new ServerboundPlayerActionPacket(
+                        ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, blockPos, player.getDirection()));
     }
 
-    private static void selectItem(LocalPlayer player, List<Item> items) {
-        for (Item it : items) {
-            var inv = player.getInventory();
-            for (int i = 0; i < 36; i++) {
-                if (inv.getItem(i).is(it)) {
-                    selectSlot(Minecraft.getInstance(), player, i);
-                    return;
-                }
-            }
-        }
+    //-------------------- Util ------------------------------------------------
+    public List<Block> getTargetBlocks() {
+        return allowedBlocksToMine;
     }
 
-    private static void selectSlot(Minecraft mc, LocalPlayer player, int slot) {
-        if (slot < 9) {
-            player.getInventory().setSelectedSlot(slot);
-        } else {
-            int hotbar = player.getInventory().getSuitableHotbarSlot();
-            Utils.swapSlots(mc, slot, hotbar, true);
-            player.getInventory().setSelectedSlot(hotbar);
-        }
+    public void addTargetBlock(Block b) {
+        allowedBlocksToMine.add(b);
     }
 
-    private static float dirToYaw(Direction d, LocalPlayer player) {
+    public void removeTargetBlock(Block b) {
+        allowedBlocksToMine.remove(b);
+    }
+
+    private float dirToYaw(Direction d) {
         return switch (d) {
             case NORTH -> 180.0f;
             case EAST -> 270.0f;
@@ -397,11 +457,29 @@ public final class BedrockMiner {
         };
     }
 
-    private static float dirToPitch(Direction d, LocalPlayer player) {
+    private float dirToPitch(Direction d) {
         return switch (d) {
             case UP -> -90.0f;
             case DOWN -> 90.0f;
             default -> player.getXRot();
         };
+    }
+
+    private void debug(String message, Object... args) {
+        if (debugEnabled()) LOGGER.info(message, args);
+    }
+
+    private record PistonPlacement(BlockPos pos, Direction dir) {
+    }
+
+    private enum Task {
+        INIT,
+        PLACEPISTON,
+        REDSTONETORCH,
+        ROTATEPLAYER,
+        SWITCHTOPICK,
+        MINEPISTON,
+        MINESUPPORT,
+        NOTHING
     }
 }
