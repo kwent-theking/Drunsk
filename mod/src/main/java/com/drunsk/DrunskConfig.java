@@ -49,7 +49,7 @@ public final class DrunskConfig {
         public void setVisualOnly(boolean value) {
             visualOnly = value;
             if (value) {
-                autoFish = autoTotem = autoEat = autoTool = autoBlock = bedrockMiner = false;
+                autoFish = autoTotem = autoEat = autoTool = autoBlock = bedrockMiner = freecam = false;
             }
         }
         public boolean autoUpdatePromptShown = false;

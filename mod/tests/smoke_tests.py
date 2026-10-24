@@ -39,7 +39,8 @@ class DrunskStaticSmokeTests(unittest.TestCase):
         client = (JAVA / "com/drunsk/DrunskClient.java").read_text(encoding="utf-8")
         self.assertIn("visualOnly", config)
         self.assertIn("automationAllowed", config)
-        self.assertGreaterEqual(client.count("notifyVisualOnly(client)"), 6)
+        self.assertGreaterEqual(client.count("notifyVisualOnly(client)"), 7)
+        self.assertIn("freecam = false", config)
         for lang in ("en_us.json", "ru_ru.json"):
             text = (RES / "assets/drunsk/lang" / lang).read_text(encoding="utf-8")
             self.assertIn("drunsk.profile.visual_only", text)

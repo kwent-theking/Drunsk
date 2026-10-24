@@ -123,7 +123,7 @@
   "drunsk.reason.offline": "no connection to relay",
   "drunsk.reason.unauthorized": "unauthorized",
   "drunsk.reason.db_error": "database error",
-  "drunsk.profile.visual_only": "Profile: Visual Only (disable automation)",
+  "drunsk.profile.visual_only": "Profile: Visual Only (visual HUD/UI only; Freecam disabled)",
   "drunsk.profile.visual_only_blocked": "Visual Only profile: automation is disabled",
   "drunsk.utils.autoUpdate": "Auto-updates (one-time first-run question)",
   "drunsk.utils.debug": "Extended debug",

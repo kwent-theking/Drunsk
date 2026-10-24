@@ -152,6 +152,7 @@ public final class DrunskClient implements ClientModInitializer {
                 openUtils();
             }
             while (freecamKey.consumeClick()) {
+                if (!DrunskConfig.util.automationAllowed()) { notifyVisualOnly(client); continue; }
                 if (client.level != null) {
                     if (DrunskConfig.util.externalFreecamPreferred &&
                             (net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("freecam")
