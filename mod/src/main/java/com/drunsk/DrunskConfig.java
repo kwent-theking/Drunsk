@@ -37,8 +37,21 @@ public final class DrunskConfig {
     public static final class Util {
         // toggles / переключатели
         public boolean autoFish, autoTotem, gamma, freecam, bedrockMiner, autoEat, autoTool, autoBlock;
+        /** Two profiles: FULL keeps utility features; VISUAL_ONLY blocks automation/seed-like actions. */
+        public boolean visualOnly = false;
         public boolean debug = false;
         public boolean autoUpdate = false;
+
+        public boolean automationAllowed() {
+            return !visualOnly;
+        }
+
+        public void setVisualOnly(boolean value) {
+            visualOnly = value;
+            if (value) {
+                autoFish = autoTotem = autoEat = autoTool = autoBlock = bedrockMiner = false;
+            }
+        }
         public boolean autoUpdatePromptShown = false;
         public boolean externalFreecamPreferred = true;
         // packet vs vanilla per module / пакетный против ванильного по модулям
@@ -103,6 +116,7 @@ public final class DrunskConfig {
         util.autoEat = optBool(u, "autoEat", false);
         util.autoTool = optBool(u, "autoTool", false);
         util.autoBlock = optBool(u, "autoBlock", false);
+        util.visualOnly = optBool(u, "visualOnly", false);
         util.debug = optBool(u, "debug", false);
         util.autoUpdate = optBool(u, "autoUpdate", false);
         util.autoUpdatePromptShown = optBool(u, "autoUpdatePromptShown", false);
@@ -132,6 +146,7 @@ public final class DrunskConfig {
             tokens.forEach(t::addProperty);
             root.add("tokens", t);
             JsonObject u = new JsonObject();
+            u.addProperty("visualOnly", util.visualOnly);
             u.addProperty("debug", util.debug);
             u.addProperty("autoUpdate", util.autoUpdate);
             u.addProperty("autoUpdatePromptShown", util.autoUpdatePromptShown);

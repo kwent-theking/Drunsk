@@ -34,6 +34,16 @@ class DrunskStaticSmokeTests(unittest.TestCase):
         self.assertTrue(all(isinstance(v, str) and v.strip() for v in en.values()))
         self.assertTrue(all(isinstance(v, str) and v.strip() for v in ru.values()))
 
+    def test_visual_only_profile_contract(self):
+        config = (JAVA / "com/drunsk/DrunskConfig.java").read_text(encoding="utf-8")
+        client = (JAVA / "com/drunsk/DrunskClient.java").read_text(encoding="utf-8")
+        self.assertIn("visualOnly", config)
+        self.assertIn("automationAllowed", config)
+        self.assertGreaterEqual(client.count("notifyVisualOnly(client)"), 6)
+        for lang in ("en_us.json", "ru_ru.json"):
+            text = (RES / "assets/drunsk/lang" / lang).read_text(encoding="utf-8")
+            self.assertIn("drunsk.profile.visual_only", text)
+
     def test_config_json_contract_matches_save_and_defaults(self):
         source = (JAVA / "com/drunsk/DrunskConfig.java").read_text(encoding="utf-8")
         # The persisted top-level contract must remain stable.

@@ -45,6 +45,10 @@ public final class DrunskClient implements ClientModInitializer {
         return DrunskConfig.util.debug || Boolean.getBoolean("drunsk.debug");
     }
 
+    private static void notifyVisualOnly(Minecraft client) {
+        if (client.player != null) client.player.sendOverlayMessage(Component.translatable("drunsk.profile.visual_only_blocked"));
+    }
+
     private static KeyMapping passportKey;
     private static KeyMapping utilsKey;
     private static KeyMapping freecamKey;
@@ -161,6 +165,7 @@ public final class DrunskClient implements ClientModInitializer {
                 }
             }
             while (minerKey.consumeClick()) {
+                if (!DrunskConfig.util.automationAllowed()) { notifyVisualOnly(client); continue; }
                 if (bedrockMiner != null && client.player != null) {
                     if (!DrunskConfig.util.bedrockMiner) {
                         client.player.sendOverlayMessage(Component.translatable("drunsk.utils.miner.disabled_hint"));
@@ -177,6 +182,7 @@ public final class DrunskClient implements ClientModInitializer {
                 }
             }
             while (fishKey.consumeClick()) {
+                if (!DrunskConfig.util.automationAllowed()) { notifyVisualOnly(client); continue; }
                 DrunskConfig.util.autoFish = !DrunskConfig.util.autoFish;
                 DrunskConfig.save();
                 if (client.player != null) client.player.sendOverlayMessage(
@@ -184,6 +190,7 @@ public final class DrunskClient implements ClientModInitializer {
                                 .append(": ").append(DrunskConfig.util.autoFish ? "ON" : "OFF"));
             }
             while (totemKey.consumeClick()) {
+                if (!DrunskConfig.util.automationAllowed()) { notifyVisualOnly(client); continue; }
                 DrunskConfig.util.autoTotem = !DrunskConfig.util.autoTotem;
                 DrunskConfig.save();
                 if (client.player != null) client.player.sendOverlayMessage(
@@ -198,6 +205,7 @@ public final class DrunskClient implements ClientModInitializer {
                                 .append(": ").append(DrunskConfig.util.gamma ? "ON" : "OFF"));
             }
             while (eatKey.consumeClick()) {
+                if (!DrunskConfig.util.automationAllowed()) { notifyVisualOnly(client); continue; }
                 DrunskConfig.util.autoEat = !DrunskConfig.util.autoEat;
                 DrunskConfig.save();
                 if (client.player != null) client.player.sendOverlayMessage(
@@ -205,6 +213,7 @@ public final class DrunskClient implements ClientModInitializer {
                                 .append(": ").append(DrunskConfig.util.autoEat ? "ON" : "OFF"));
             }
             while (toolKey.consumeClick()) {
+                if (!DrunskConfig.util.automationAllowed()) { notifyVisualOnly(client); continue; }
                 DrunskConfig.util.autoTool = !DrunskConfig.util.autoTool;
                 DrunskConfig.save();
                 if (client.player != null) client.player.sendOverlayMessage(
@@ -212,6 +221,7 @@ public final class DrunskClient implements ClientModInitializer {
                                 .append(": ").append(DrunskConfig.util.autoTool ? "ON" : "OFF"));
             }
             while (blockKey.consumeClick()) {
+                if (!DrunskConfig.util.automationAllowed()) { notifyVisualOnly(client); continue; }
                 DrunskConfig.util.autoBlock = !DrunskConfig.util.autoBlock;
                 DrunskConfig.save();
                 if (client.player != null) client.player.sendOverlayMessage(

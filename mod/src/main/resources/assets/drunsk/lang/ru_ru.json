@@ -123,6 +123,8 @@
   "drunsk.reason.offline": "нет соединения с релеем",
   "drunsk.reason.unauthorized": "нет доступа",
   "drunsk.reason.db_error": "ошибка базы данных",
+  "drunsk.profile.visual_only": "Профиль: только визуальные функции (автоматизация отключена)",
+  "drunsk.profile.visual_only_blocked": "Профиль «Только визуальные»: автоматизация отключена",
   "drunsk.utils.autoUpdate": "Автообновления (единоразовый вопрос при первом входе)",
   "drunsk.utils.debug": "Расширенный debug",
   "drunsk.utils.externalFreecamPreferred": "Предпочитать внешний Freecam",
