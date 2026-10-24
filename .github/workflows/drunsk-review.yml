@@ -1,0 +1,129 @@
+name: Drunsk CI and budget AI review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      force_deep_review:
+        description: 'Run the expensive fallback reviewer'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: drunsk-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Configure these repository secrets once. The endpoint is OpenAI-compatible.
+  AI_API_BASE: ${{ secrets.DRUNSK_AI_API_BASE }}
+  AI_API_KEY: ${{ secrets.DRUNSK_AI_API_KEY }}
+  AI_CHEAP_MODEL: ${{ secrets.DRUNSK_AI_CHEAP_MODEL }}
+  AI_DEEP_MODEL: ${{ secrets.DRUNSK_AI_DEEP_MODEL }}
+
+jobs:
+  checks:
+    name: Deterministic checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - name: Build Drunsk mod
+        working-directory: mod
+        run: ./gradlew --no-daemon build
+      - name: Build Chekushki
+        run: gradle --no-daemon build
+      - name: Relay syntax and dependency checks
+        working-directory: relay
+        run: |
+          npm ci --ignore-scripts
+          node --check server.js
+          node --check selftest.js
+          npm audit --omit=dev --audit-level=high
+      - name: Check tracked secrets
+        shell: bash
+        run: |
+          if git grep -nE '(Bearer [A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,})' -- ':!*.md'; then
+            echo 'Tracked credential-like value found'; exit 1
+          fi
+
+  ai-review:
+    name: Budget AI review
+    needs: checks
+    if: ${{ needs.checks.result == 'success' && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install review tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq jq curl
+      - name: Collect diff and changed files
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git diff --no-ext-diff --unified=60 "$BASE" "$HEAD" > /tmp/drunsk.diff
+          git diff --name-status "$BASE" "$HEAD" > /tmp/drunsk.files
+          # Keep review requests small and predictable.
+          head -c 120000 /tmp/drunsk.diff > /tmp/drunsk.diff.trimmed
+      - name: Cheap Luna/Haiku triage
+        id: cheap
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AI_API_BASE:-}" ] || [ -z "${AI_API_KEY:-}" ]; then
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            echo 'No AI secrets configured; deterministic checks are the complete review.' >> /tmp/review.md
+            exit 0
+          fi
+          MODEL="${AI_CHEAP_MODEL:-claude-haiku-4-5}"
+          jq -n --arg model "$MODEL" --arg files "$(cat /tmp/drunsk.files)" --arg diff "$(cat /tmp/drunsk.diff.trimmed)" \
+            '{model:$model,temperature:0,max_tokens:1200,messages:[{role:"system",content:"You are a cheap PR triage reviewer. Return JSON only: {status: \"clean\"|\"complex\"|\"problem\", summary:string, findings:[{file:string,line:number, severity:\"low\"|\"medium\"|\"high\", message:string}]} . Review only the supplied diff. Do not invent issues."},{role:"user",content:("Changed files:\n"+$files+"\n\nDiff:\n"+$diff)}]}' > /tmp/request.json
+          curl --fail-with-body -sS --max-time 90 "$AI_API_BASE/chat/completions" \
+            -H "Authorization: Bearer $AI_API_KEY" -H 'Content-Type: application/json' \
+            --data-binary @/tmp/request.json | jq -r '.choices[0].message.content' > /tmp/review.json
+          jq -e . /tmp/review.json >/dev/null
+          jq -r .summary /tmp/review.json > /tmp/review.md
+          echo 'configured=true' >> "$GITHUB_OUTPUT"
+          echo "status=$(jq -r .status /tmp/review.json)" >> "$GITHUB_OUTPUT"
+      - name: Escalate only complex/problematic reviews
+        if: ${{ steps.cheap.outputs.configured == 'true' && (steps.cheap.outputs.status == 'complex' || steps.cheap.outputs.status == 'problem' || github.event.inputs.force_deep_review == 'true') }}
+        env:
+          MODEL: ${{ env.AI_DEEP_MODEL }}
+        run: |
+          jq -n --arg model "${MODEL:-claude-sonnet-4-5}" --arg triage "$(cat /tmp/review.json)" --arg diff "$(cat /tmp/drunsk.diff.trimmed)" \
+            '{model:$model,temperature:0,max_tokens:2200,messages:[{role:"system",content:"You are the second-level reviewer. Return Markdown with verdict, concrete findings, and minimal fixes. Only report issues supported by the diff."},{role:"user",content:("Cheap triage:\n"+$triage+"\n\nDiff:\n"+$diff)}]}' > /tmp/deep-request.json
+          curl --fail-with-body -sS --max-time 150 "$AI_API_BASE/chat/completions" \
+            -H "Authorization: Bearer $AI_API_KEY" -H 'Content-Type: application/json' \
+            --data-binary @/tmp/deep-request.json | jq -r '.choices[0].message.content' > /tmp/review.md
+      - name: Comment review with diff and file list
+        uses: actions/github-script@v7
+        env:
+          REVIEW: ${{ github.event.pull_request.number }}
+        with:
+          script: |
+            const fs = require('fs');
+            const body = [
+              '## Drunsk budget review', '',
+              fs.readFileSync('/tmp/review.md', 'utf8').trim(), '',
+              '<details><summary>Changed files</summary>', '',
+              '```text', fs.readFileSync('/tmp/drunsk.files', 'utf8').trim(), '```',
+              '</details>', '',
+              'The full diff is the pull request diff. Deterministic checks ran before AI.'
+            ].join('\n');
+            github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
