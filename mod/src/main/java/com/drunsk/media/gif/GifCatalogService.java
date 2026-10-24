@@ -80,7 +80,9 @@ public final class GifCatalogService {
     private void persist(GifCatalogConfig updated) throws IOException {
         Path parent = file.getParent();
         if (parent != null) Files.createDirectories(parent);
-        Path temp = Files.createTempFile(parent, file.getFileName().toString(), ".tmp");
+        Path temp = parent == null
+                ? Files.createTempFile(file.getFileName().toString(), ".tmp")
+                : Files.createTempFile(parent, file.getFileName().toString(), ".tmp");
         try {
             codec.write(temp, updated);
             try { Files.move(temp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }
