@@ -52,6 +52,7 @@ jobs:
       - name: Relay syntax and dependency checks
         working-directory: relay
         run: |
+          npm install --package-lock-only --ignore-scripts --no-audit
           npm ci --ignore-scripts
           node --check server.js
           node --check selftest.js
