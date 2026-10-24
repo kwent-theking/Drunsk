@@ -123,6 +123,7 @@
   "drunsk.reason.offline": "no connection to relay",
   "drunsk.reason.unauthorized": "unauthorized",
   "drunsk.reason.db_error": "database error",
+  "drunsk.utils.autoUpdate": "Auto-updates (one-time first-run question)",
   "drunsk.utils.debug": "Extended debug",
   "drunsk.utils.externalFreecamPreferred": "Prefer external Freecam",
   "drunsk.utils.modes": "Modes",

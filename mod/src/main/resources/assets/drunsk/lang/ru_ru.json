@@ -123,6 +123,7 @@
   "drunsk.reason.offline": "нет соединения с релеем",
   "drunsk.reason.unauthorized": "нет доступа",
   "drunsk.reason.db_error": "ошибка базы данных",
+  "drunsk.utils.autoUpdate": "Автообновления (единоразовый вопрос при первом входе)",
   "drunsk.utils.debug": "Расширенный debug",
   "drunsk.utils.externalFreecamPreferred": "Предпочитать внешний Freecam",
   "drunsk.utils.modes": "Режимы",
