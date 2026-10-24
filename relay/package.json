@@ -5,7 +5,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "selftest": "node selftest.js"
+    "selftest": "node selftest.js",
+    "test:server": "node test-server.js",
+    "test:protocol": "node test-client.js"
   },
   "dependencies": {
     "mysql2": "^3.11.0",
