@@ -40,9 +40,10 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: gradle
+      - uses: gradle/actions/setup-gradle@v4
       - name: Build Drunsk mod
         working-directory: mod
-        run: ./gradlew --no-daemon build
+        run: gradle --no-daemon build
       - name: Build Chekushki
         run: gradle --no-daemon build
       - name: Relay syntax and dependency checks
